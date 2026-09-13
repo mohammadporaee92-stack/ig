@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /dashboard
+Disallow: /automations
+Disallow: /analytics
+Disallow: /settings
+Disallow: /api
+Allow: /$

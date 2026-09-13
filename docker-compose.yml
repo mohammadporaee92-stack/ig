@@ -1,0 +1,66 @@
+# ──────────────────────────────────────────────────────────────
+# IGFlow — Production stack
+#
+#   ۱. cp .env.example .env.production  و مقادیر را پر کنید
+#   ۲. docker compose up -d --build
+#   ۳. docker compose exec app npm run db:migrate
+# ──────────────────────────────────────────────────────────────
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-igflow}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD الزامی است}
+      POSTGRES_DB: ${DB_NAME:-igflow}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-igflow}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # پورت عمداً منتشر نمی‌شود — فقط از شبکهٔ داخلی قابل دسترسی است
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build: .
+    env_file: .env.production
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-igflow}:${DB_PASSWORD}@db:5432/${DB_NAME:-igflow}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports:
+      - '${APP_PORT:-3000}:3000'
+    restart: unless-stopped
+
+  # ⚠️ worker باید پروسهٔ جداگانه باشد — روی پلتفرم‌های serverless اجرا نمی‌شود
+  worker:
+    build: .
+    command: npm run worker
+    env_file: .env.production
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-igflow}:${DB_PASSWORD}@db:5432/${DB_NAME:-igflow}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

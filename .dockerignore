@@ -1,0 +1,16 @@
+node_modules
+.next
+.data
+.git
+.env
+.env.local
+.env.*.local
+coverage
+dist
+out
+build
+*.log
+*.tsbuildinfo
+docs
+tests
+README.md

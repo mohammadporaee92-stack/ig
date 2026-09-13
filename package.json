@@ -1,0 +1,60 @@
+{
+  "name": "igflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "IGFlow — Instagram Comment → Keyword → DM → Follow Gate automation SaaS (official Instagram Platform APIs only)",
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3000",
+    "worker": "tsx src/worker/main.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "doctor": "tsx scripts/doctor.mts",
+    "setup": "tsx scripts/doctor.mts",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "predev": "tsx scripts/preflight.mts",
+    "prestart": "tsx scripts/preflight.mts",
+    "package": "tsx scripts/package.mts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "bullmq": "^5.34.6",
+    "clsx": "^2.1.1",
+    "ioredis": "^5.4.2",
+    "jose": "^5.9.6",
+    "next": "^15.5.25",
+    "pg": "^8.13.1",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "tailwind-merge": "^2.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^15.5.25",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "msgpackr-extract": true,
+    "unrs-resolver": true,
+    "sharp": true
+  }
+}

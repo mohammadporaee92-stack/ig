@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IGFlow — گزارش Capability Audit و معماری</title>
+<style>
+  :root{
+    --brand:#7c3aed; --brand-50:#f5f3ff; --brand-100:#ede9fe; --brand-700:#6d28d9;
+    --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --bg:#f8fafc;
+    --ok:#059669; --ok-bg:#ecfdf5; --warn:#d97706; --warn-bg:#fffbeb; --bad:#dc2626; --bad-bg:#fef2f2;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Vazirmatn","IRANSans","Segoe UI",system-ui,-apple-system,sans-serif;
+    line-height:1.9; font-size:15px;
+  }
+  .deck{max-width:1080px;margin:0 auto;padding:28px 20px 80px}
+  .slide{
+    background:#fff;border:1px solid var(--line);border-radius:18px;
+    padding:34px 36px;margin-bottom:22px;box-shadow:0 1px 3px rgba(15,23,42,.05);
+    page-break-inside:avoid;
+  }
+  .cover{
+    background:linear-gradient(135deg,#6d28d9 0%,#9333ea 45%,#db2777 100%);
+    color:#fff;border:none;padding:56px 40px;text-align:center;
+  }
+  .cover h1{font-size:42px;margin:0 0 10px;font-weight:800;letter-spacing:-.5px}
+  .cover p{margin:6px 0;opacity:.95;font-size:17px}
+  .cover .flow{
+    margin-top:26px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;
+  }
+  .cover .flow span{
+    background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);
+    border-radius:999px;padding:7px 16px;font-size:14px;backdrop-filter:blur(4px);
+  }
+  .kicker{
+    display:inline-block;background:var(--brand-50);color:var(--brand-700);
+    font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;margin-bottom:10px;
+  }
+  h2{font-size:25px;margin:0 0 6px;font-weight:800;letter-spacing:-.3px}
+  h3{font-size:17px;margin:26px 0 10px;font-weight:700}
+  .sub{color:var(--muted);margin:0 0 20px;font-size:14px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th,td{border-bottom:1px solid var(--line);padding:10px 12px;text-align:right;vertical-align:top}
+  th{background:#f8fafc;font-weight:700;font-size:12.5px;color:#475569}
+  tr:last-child td{border-bottom:none}
+  code{background:#f1f5f9;padding:2px 6px;border-radius:5px;font-size:12.5px;
+       font-family:ui-monospace,SFMono-Regular,Menlo,monospace;direction:ltr;display:inline-block}
+  .pill{display:inline-block;padding:2px 9px;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap}
+  .ok{background:var(--ok-bg);color:var(--ok)}
+  .warn{background:var(--warn-bg);color:var(--warn)}
+  .bad{background:var(--bad-bg);color:var(--bad)}
+  .callout{border-radius:12px;padding:16px 18px;margin:16px 0;font-size:14px}
+  .c-warn{background:var(--warn-bg);border:1px solid #fde68a}
+  .c-ok{background:var(--ok-bg);border:1px solid #a7f3d0}
+  .c-bad{background:var(--bad-bg);border:1px solid #fecaca}
+  .c-info{background:var(--brand-50);border:1px solid #ddd6fe}
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .card{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}
+  .card h4{margin:0 0 6px;font-size:14.5px;font-weight:700}
+  .card p{margin:0;font-size:13px;color:var(--muted);line-height:1.8}
+  .stat{text-align:center;border:1px solid var(--line);border-radius:12px;padding:18px 12px;background:#fff}
+  .stat b{display:block;font-size:28px;font-weight:800;color:var(--brand);line-height:1.3}
+  .stat span{font-size:12.5px;color:var(--muted)}
+  .flowchart{background:#f8fafc;border-radius:12px;padding:20px;margin:14px 0}
+  .node{
+    background:#fff;border:1px solid var(--line);border-radius:10px;padding:11px 15px;
+    font-size:13.5px;display:flex;gap:9px;align-items:flex-start
+  }
+  .node b{font-weight:700}
+  .node small{display:block;color:var(--muted);font-size:12px;margin-top:2px;line-height:1.7}
+  .n-brand{background:var(--brand-50);border-color:#ddd6fe}
+  .n-warn{background:var(--warn-bg);border-color:#fde68a}
+  .n-ok{background:var(--ok-bg);border-color:#a7f3d0}
+  .arrow{color:#cbd5e1;text-align:center;font-size:15px;margin:5px 0;line-height:1}
+  .arrow em{font-style:normal;font-size:11.5px;color:var(--muted);margin-right:6px}
+  ul{margin:8px 0;padding-right:20px}
+  li{margin:5px 0;font-size:14px}
+  .layers{display:grid;gap:8px}
+  .layer{border-radius:10px;padding:13px 16px;font-size:13.5px;border:1px solid var(--line)}
+  .layer b{font-weight:700;display:block;margin-bottom:2px}
+  .layer small{color:var(--muted);font-size:12.5px;direction:ltr;display:block;text-align:right}
+  .l1{background:#eff6ff;border-color:#bfdbfe}
+  .l2{background:var(--brand-50);border-color:#ddd6fe}
+  .l3{background:#fdf2f8;border-color:#fbcfe8}
+  .l4{background:#f0fdfa;border-color:#99f6e4}
+  .l5{background:#fffbeb;border-color:#fde68a}
+  .foot{text-align:center;color:var(--muted);font-size:12.5px;padding:10px}
+  @media print{ body{background:#fff} .slide{box-shadow:none;page-break-inside:avoid} }
+</style>
+</head>
+<body>
+<div class="deck">
+
+<!-- ═══════════ COVER ═══════════ -->
+<section class="slide cover">
+  <h1>IGFlow</h1>
+  <p>پلتفرم SaaS چندمستأجری اتوماسیون اینستاگرام</p>
+  <p style="opacity:.85;font-size:14px">گزارش مرحلهٔ ۱ (Capability Audit) و مرحلهٔ ۲ (معماری)</p>
+  <div class="flow">
+    <span>💬 کامنت</span><span>🔍 کلیدواژه</span><span>📩 دایرکت خصوصی</span>
+    <span>🔒 بررسی فالو</span><span>🎁 ارسال محتوا</span>
+  </div>
+  <p style="margin-top:22px;font-size:13px;opacity:.8">
+    ساخته‌شده <strong>فقط</strong> با APIهای رسمی و فعلی Instagram Platform · ۱۲ شهریور ۱۴۰۵
+  </p>
+</section>
+
+<!-- ═══════════ VERDICT ═══════════ -->
+<section class="slide">
+  <span class="kicker">حکم نهایی</span>
+  <h2>پروژه با API رسمی ساختنی است — با یک تغییر ترتیب</h2>
+  <p class="sub">هیچ بخشی از خواستهٔ شما نیاز به روش غیررسمی ندارد. فقط جای «بررسی فالو» در جریان عوض می‌شود.</p>
+
+  <table>
+    <thead><tr><th style="width:34px">#</th><th>یافته</th><th style="width:90px">وضعیت</th></tr></thead>
+    <tbody>
+      <tr><td>۱</td><td><strong>ورود با اینستاگرام بدون Facebook Page ممکن است.</strong> مسیر رسمی <em>Business Login for Instagram</em> روی <code>graph.instagram.com</code>؛ کاربر فقط با حساب خودش لاگین می‌کند.</td><td><span class="pill ok">ممکن</span></td></tr>
+      <tr><td>۲</td><td><strong>کامنت → کلیدواژه → دایرکت خصوصی</strong> کاملاً رسمی و پشتیبانی‌شده است.</td><td><span class="pill ok">ممکن</span></td></tr>
+      <tr><td>۳</td><td><strong>بررسی فالو رسمی وجود دارد</strong> (<code>is_user_follow_business</code>) اما مشروط به <strong>رضایت کاربر</strong>؛ و کامنت‌گذاشتن رضایت ایجاد نمی‌کند.</td><td><span class="pill warn">مشروط</span></td></tr>
+      <tr><td>۴</td><td><strong>رویداد/وبهوک «کاربر فالو کرد» وجود ندارد.</strong> در فهرست رسمی فیلدهای webhook اینستاگرام هیچ فیلد <code>follows</code> نیست.</td><td><span class="pill bad">ناموجود</span></td></tr>
+      <tr><td>۵</td><td><strong>لیست فالوورها</strong> — چنین edge‌ای برای IG User در مرجع رسمی وجود ندارد.</td><td><span class="pill bad">ناموجود</span></td></tr>
+      <tr><td>۶</td><td>هیچ‌جا نیاز به scraping، Private API، کوکی سشن یا رمز کاربر نیست.</td><td><span class="pill ok">تأیید</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-warn">
+    <strong>⚠️ مهم‌ترین یافتهٔ این Audit</strong><br />
+    مستند رسمی <em>Instagram User Profile API</em> صریح می‌گوید رضایت کاربر فقط زمانی ثبت می‌شود که کاربر
+    <strong>پیامی بفرستد</strong> یا <strong>روی Icebreaker / Persistent Menu / Quick Reply بزند</strong>.
+    اگر کاربر فقط کامنت گذاشته باشد، پاسخ API این خطاست:
+    <code>User consent is required to access user profile</code>.
+    <br /><br />
+    این یعنی بررسی فالو «جعلی» نیست و واقعاً وجود دارد — اما <strong>جای آن در جریان جابه‌جا می‌شود</strong>:
+    بعد از اولین تعامل کاربر در دایرکت، نه بلافاصله بعد از کامنت.
+  </div>
+</section>
+
+<!-- ═══════════ CAPABILITY TABLE ═══════════ -->
+<section class="slide">
+  <span class="kicker">مرحلهٔ ۱</span>
+  <h2>جدول قابلیت‌ها</h2>
+  <p class="sub">منبع: صرفاً <code>developers.facebook.com</code> — بدون اتکا به ادعای سایت‌های ثالث.</p>
+
+  <table>
+    <thead><tr><th>قابلیت</th><th style="width:78px">رسمی؟</th><th>Endpoint / فیلد</th><th>محدودیت کلیدی</th></tr></thead>
+    <tbody>
+      <tr><td>ورود اینستاگرام (بدون Page)</td><td><span class="pill ok">بله</span></td><td><code>/oauth/authorize</code> → <code>/oauth/access_token</code></td><td>فقط حساب Professional؛ توکن ۱ ساعت → ۶۰ روز</td></tr>
+      <tr><td>تمدید توکن</td><td><span class="pill ok">بله</span></td><td><code>/refresh_access_token</code></td><td>توکن باید ≥۲۴ ساعت عمر داشته و منقضی نشده باشد</td></tr>
+      <tr><td>وبهوک کامنت</td><td><span class="pill ok">بله</span></td><td>فیلد <code>comments</code></td><td>Advanced Access + تأیید کسب‌وکار؛ پاسخ ۲۰۰ در &lt;۵ ثانیه</td></tr>
+      <tr><td>پاسخ عمومی به کامنت</td><td><span class="pill ok">بله</span></td><td><code>POST /&lt;COMMENT_ID&gt;/replies</code></td><td>—</td></tr>
+      <tr><td>پاسخ خصوصی (شروع دایرکت)</td><td><span class="pill ok">بله</span></td><td><code>recipient:{comment_id}</code></td><td><strong>۱ بار به ازای هر کامنت</strong>؛ تا ۷ روز</td></tr>
+      <tr><td>ارسال دایرکت آزاد</td><td><span class="pill ok">بله</span></td><td><code>recipient:{id: IGSID}</code></td><td>فقط در <strong>پنجرهٔ ۲۴ ساعته</strong>؛ متن ≤ ۱۰۰۰ بایت</td></tr>
+      <tr><td>دکمهٔ Quick Reply</td><td><span class="pill ok">بله</span></td><td><code>message.quick_replies[]</code></td><td>≤۱۳ دکمه، عنوان ≤۲۰ کاراکتر، روی دسکتاپ نمایش داده نمی‌شود</td></tr>
+      <tr><td>ارسال تصویر/ویدیو/PDF</td><td><span class="pill ok">بله</span></td><td><code>message.attachment</code></td><td>تصویر ≤۸MB؛ ویدیو/صوت/PDF ≤۲۵MB</td></tr>
+      <tr><td><strong>بررسی فالو</strong></td><td><span class="pill warn">مشروط</span></td><td><code>is_user_follow_business</code></td><td>⛔ رضایت کاربر الزامی — کامنت رضایت نمی‌سازد</td></tr>
+      <tr><td>رویداد فالو (webhook)</td><td><span class="pill bad">خیر</span></td><td>—</td><td>فیلد <code>follows</code> در مرجع رسمی وجود ندارد</td></tr>
+      <tr><td>لیست فالوورها</td><td><span class="pill bad">خیر</span></td><td>—</td><td>چنین edge‌ای وجود ندارد</td></tr>
+      <tr><td>Business Discovery / Hashtag</td><td><span class="pill bad">خیر</span></td><td>—</td><td>فقط در مسیر Facebook Login؛ برای Follow Gate هم بی‌فایده است</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════ THE FLOW ═══════════ -->
+<section class="slide">
+  <span class="kicker">طراحی نهایی</span>
+  <h2>جریان Follow Gate — قفل‌شده و تست‌شده</h2>
+  <p class="sub">این دقیقاً همان مسیری است که موتور اجرا می‌کند و در تست‌های end-to-end تأیید شده است.</p>
+
+  <div class="flowchart">
+    <div class="node"><span>💬</span><div><b>کاربر زیر پست کامنت می‌گذارد</b><small>وبهوک <code>comments</code> — پاسخ ۲۰۰ فوری، پردازش در صف</small></div></div>
+    <div class="arrow">↓</div>
+    <div class="node n-brand"><span>🔍</span><div><b>تشخیص کلیدواژه</b><small>چند کلیدواژه، exact/contains، نرمال‌سازی فارسی، حذف تکراری به ازای هر کاربر در هر پست</small></div></div>
+    <div class="arrow">↓</div>
+    <div class="node"><span>📢</span><div><b>پاسخ عمومی (اختیاری)</b><small>زیر کامنت کاربر منتشر می‌شود</small></div></div>
+    <div class="arrow">↓</div>
+    <div class="node n-brand"><span>📩</span><div><b>پاسخ خصوصی + دکمهٔ Quick Reply</b><small><code>recipient:{comment_id}</code> — تنها راه رسمی شروع گفتگو با کسی که به شما پیام نداده</small></div></div>
+    <div class="arrow"><em>۱ بار برای هر کامنت · تا ۷ روز</em> ↓</div>
+    <div class="node n-warn"><span>⏳</span><div><b>انتظار برای لمس دکمه</b><small>گلوگاه اجباری پلتفرم: تا اینجا رضایتی وجود ندارد و هیچ کوئری پروفایلی زده نمی‌شود</small></div></div>
+    <div class="arrow"><em>کاربر دکمه را زد ⇒ رضایت ثبت شد + پنجرهٔ ۲۴ ساعته باز شد</em> ↓</div>
+    <div class="node n-warn"><span>🔒</span><div><b>بررسی فالو</b><small><code>GET /&lt;IGSID&gt;?fields=is_user_follow_business</code> — حالا مجاز است</small></div></div>
+    <div class="arrow"><em>فالو نکرده ⇒</em> ↓</div>
+    <div class="node n-warn"><span>🙏</span><div><b>پیام درخواست فالو + دکمهٔ «بررسی مجدد»</b><small>حلقهٔ محدود با سقف قابل تنظیم (پیش‌فرض ۳ بار)</small></div></div>
+    <div class="arrow"><em>فالو کرده ✅ ⇒</em> ↓</div>
+    <div class="node n-ok"><span>🎁</span><div><b>ارسال محتوای اصلی</b><small>متن + متغیرها + پیوست، داخل پنجرهٔ ۲۴ ساعته</small></div></div>
+    <div class="arrow">↓</div>
+    <div class="node n-ok"><span>✅</span><div><b>اجرا تکمیل شد</b><small><code>status=completed</code> · <code>delivered=true</code></small></div></div>
+  </div>
+
+  <div class="callout c-ok">
+    <strong>اگر Follow Gate خاموش باشد:</strong> پس از پاسخ کاربر مستقیم محتوای اصلی ارسال می‌شود و
+    <strong>هیچ درخواستی</strong> به Profile API زده نمی‌شود — صفر مصرف سهمیه.
+  </div>
+</section>
+
+<!-- ═══════════ HONESTY ═══════════ -->
+<section class="slide">
+  <span class="kicker">شفافیت فنی</span>
+  <h2>چه چیزی ممکن نیست و ما چه کردیم</h2>
+  <p class="sub">هیچ قابلیتی جعل نشده است. هر محدودیت هم در مستندات و هم در کد و هم در رابط کاربری اعلام می‌شود.</p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h4>❌ بررسی فالو در لحظهٔ کامنت</h4>
+      <p><strong>چرا:</strong> رضایت کاربر وجود ندارد و API خطا می‌دهد.<br />
+      <strong>راه‌حل ما:</strong> جابه‌جایی بررسی به بعد از لمس دکمه در دایرکت — همان نتیجه، مسیر رسمی.</p>
+    </div>
+    <div class="card">
+      <h4>❌ وبهوک «کاربر فالو کرد»</h4>
+      <p><strong>چرا:</strong> چنین فیلدی در Instagram Platform وجود ندارد.<br />
+      <strong>راه‌حل ما:</strong> دکمهٔ «بررسی مجدد» که خودِ کاربر می‌زند — رفتار مشابه، بدون polling.</p>
+    </div>
+    <div class="card">
+      <h4>❌ خواندن لیست فالوورها</h4>
+      <p><strong>چرا:</strong> چنین edge‌ای در مرجع رسمی نیست.<br />
+      <strong>راه‌حل ما:</strong> بررسی تک‌کاربره و لحظه‌ای در زمان نیاز.</p>
+    </div>
+    <div class="card">
+      <h4>⚠️ کاربری که هرگز دکمه را نمی‌زند</h4>
+      <p><strong>چرا:</strong> بدون رضایت، ادامهٔ گفتگو ممنوع است.<br />
+      <strong>راه‌حل ما:</strong> اجرا در وضعیت <code>awaiting_user_interaction</code> می‌ماند و در قیف تحلیل‌ها شفاف نمایش داده می‌شود.</p>
+    </div>
+  </div>
+
+  <h3>انتزاع FollowChecker</h3>
+  <p style="font-size:14px;margin:0 0 10px">
+    بررسی فالو پشت یک اینترفیس قرار دارد تا اگر فردا Meta قابلیت بهتری داد، فقط یک کلاس اضافه شود:
+  </p>
+  <table>
+    <thead><tr><th>پیاده‌سازی</th><th>وضعیت</th><th>توضیح</th></tr></thead>
+    <tbody>
+      <tr><td><code>MessagingProfileFollowChecker</code></td><td><span class="pill ok">فعال · پیش‌فرض</span></td><td>رسمی، مبتنی بر <code>is_user_follow_business</code>؛ بدون رضایت، بدون فراخوانی API خارج می‌شود</td></tr>
+      <tr><td><code>UnsupportedFollowChecker</code></td><td><span class="pill warn">صادقانه</span></td><td>همیشه <code>unknown</code> برمی‌گرداند و در UI «پشتیبانی‌نشده» علامت می‌خورد</td></tr>
+      <tr><td><code>InstagramOfficialFollowChecker</code></td><td><span class="pill bad">رزرو آینده</span></td><td>نقطهٔ توسعه در صورت انتشار API بهتر</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════ ARCHITECTURE ═══════════ -->
+<section class="slide">
+  <span class="kicker">مرحلهٔ ۲</span>
+  <h2>معماری سیستم</h2>
+  <p class="sub">پنج لایهٔ مستقل؛ دامنه هیچ وابستگی‌ای به فریم‌ورک یا شبکه ندارد.</p>
+
+  <div class="layers">
+    <div class="layer l1"><b>🖥️ لایهٔ نمایش</b><small>src/app/** · src/components/** — Next.js 15 App Router، RTL، Server Component به‌صورت پیش‌فرض</small></div>
+    <div class="layer l2"><b>🎯 لایهٔ سرویس</b><small>src/server/** — AutomationEngine · WebhookProcessor · MessageSender · TokenService · RateLimiter</small></div>
+    <div class="layer l3"><b>🧠 لایهٔ دامنه (خالص، بدون I/O)</b><small>src/domain/** — keyword/engine · follow/follow-checker · messaging/renderer · automation/webhook-parser</small></div>
+    <div class="layer l4"><b>🔌 لایهٔ زیرساخت</b><small>src/infra/** — db (PostgreSQL/PGlite) · instagram (client + error taxonomy) · queue (BullMQ/in-memory)</small></div>
+    <div class="layer l5"><b>⚙️ لایهٔ پایه</b><small>src/lib/** — env (Zod) · crypto (AES-256-GCM) · logger (با حذف خودکار اسرار) · utils</small></div>
+  </div>
+
+  <h3>چرا صف جدا از مسیر HTTP؟</h3>
+  <div class="callout c-info">
+    Meta انتظار پاسخ <strong>۲۰۰ در کمتر از ۵ ثانیه</strong> دارد و در صورت عدم دریافت، رویداد را تا
+    <strong>۳۶ ساعت</strong> بازارسال می‌کند. بنابراین مسیر HTTP فقط <em>اعتبارسنجی امضا + ذخیره + enqueue</em>
+    انجام می‌دهد و کل کار سنگین در worker اجرا می‌شود. کلیدهای حذف تکراری در سه سطح تعریف شده‌اند:
+    <code>(platform, provider_event_id)</code> · <code>(automation_id, comment_id)</code> · <code>idempotency_key</code> پیام.
+  </div>
+
+  <h3>تلاش مجدد و کنترل نرخ</h3>
+  <div class="grid g3">
+    <div class="card"><h4>پس‌رفت نمایی</h4><p>۵ ثانیه → ۳۰ ثانیه → ۲ دقیقه → ناموفق</p></div>
+    <div class="card"><h4>احترام به Retry-After</h4><p>کدهای ۴، ۱۷، ۳۲، ۶۱۳ و HTTP 429</p></div>
+    <div class="card"><h4>سطل توکن پایدار</h4><p>در دیتابیس، تفکیک‌شده: پیام‌ها / پاسخ‌های خصوصی / کامنت‌ها</p></div>
+  </div>
+</section>
+
+<!-- ═══════════ SECURITY ═══════════ -->
+<section class="slide">
+  <span class="kicker">امنیت</span>
+  <h2>چندمستأجری و محافظت از داده</h2>
+
+  <div class="grid g2">
+    <div class="card"><h4>🔐 رمزنگاری توکن</h4><p>AES-256-GCM با کلید مشتق‌شده از scrypt. توکن‌ها با پیشوند <code>v1.</code> ذخیره می‌شوند و تنها نقطهٔ رمزگشایی <code>TokenService</code> است.</p></div>
+    <div class="card"><h4>🙈 عدم افشا</h4><p>هیچ توکنی در پاسخ API، لاگ یا مرورگر ظاهر نمی‌شود. لاگر به‌صورت خودکار مقادیر حساس را <code>[REDACTED]</code> می‌کند.</p></div>
+    <div class="card"><h4>🏢 ایزولاسیون مستأجر</h4><p>هر متد دامنه <code>user_id</code> را در <code>WHERE</code> دارد. تنها استثنای عمدی، یافتن مستأجر از روی وبهوک است.</p></div>
+    <div class="card"><h4>🛡️ ضد SQL Injection</h4><p>صددرصد کوئری‌ها پارامتری‌اند؛ هیچ الحاق رشته‌ای در SQL وجود ندارد.</p></div>
+    <div class="card"><h4>✍️ اعتبارسنجی امضا</h4><p><code>X-Hub-Signature-256</code> با مقایسهٔ زمان‌ثابت روی بدنهٔ خام بررسی می‌شود.</p></div>
+    <div class="card"><h4>🍪 سشن امن</h4><p>JWT با jose در کوکی <code>httpOnly</code> + <code>SameSite=Lax</code> + <code>Secure</code> در production — نه localStorage.</p></div>
+  </div>
+
+  <div class="callout c-bad">
+    <strong>آنچه هرگز انجام نمی‌دهیم:</strong> scraping · Selenium/Playwright روی اینستاگرام · Instagram Private API ·
+    کوکی سشن · دریافت نام کاربری و رمز اینستاگرام · تعامل جعلی. هیچ‌کدام در این کدبیس وجود ندارد.
+  </div>
+</section>
+
+<!-- ═══════════ STATUS ═══════════ -->
+<section class="slide">
+  <span class="kicker">وضعیت فعلی</span>
+  <h2>پیشرفت مراحل</h2>
+
+  <div class="grid g4" style="margin-bottom:20px">
+    <div class="stat"><b>۱۱۰</b><span>تست، همه سبز</span></div>
+    <div class="stat"><b>۱۸</b><span>جدول دیتابیس</span></div>
+    <div class="stat"><b>۱۱</b><span>صفحهٔ رابط کاربری</span></div>
+    <div class="stat"><b>۰</b><span>خطای TypeScript</span></div>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:44px">مرحله</th><th>عنوان</th><th style="width:110px">وضعیت</th></tr></thead>
+    <tbody>
+      <tr><td>۱</td><td>بررسی قابلیت‌های رسمی</td><td><span class="pill ok">کامل</span></td></tr>
+      <tr><td>۲</td><td>معماری</td><td><span class="pill ok">کامل</span></td></tr>
+      <tr><td>۳</td><td>ساختار پروژه</td><td><span class="pill ok">کامل</span></td></tr>
+      <tr><td>۴</td><td>طرح دیتابیس (۱۸ جدول)</td><td><span class="pill ok">کامل</span></td></tr>
+      <tr><td>۵</td><td>OAuth اینستاگرام</td><td><span class="pill ok">کامل · ۲۱ تست</span></td></tr>
+      <tr><td>۶</td><td>وبهوک</td><td><span class="pill ok">کامل · ۱۷ تست</span></td></tr>
+      <tr><td>۷</td><td>پردازش کامنت</td><td><span class="pill ok">کامل</span></td></tr>
+      <tr><td>۸</td><td>موتور اتوماسیون</td><td><span class="pill ok">کامل · ۱۶ تست</span></td></tr>
+      <tr><td>۹</td><td>موتور ارسال دایرکت</td><td><span class="pill ok">کامل</span></td></tr>
+      <tr><td>۱۰</td><td>Follow Gate</td><td><span class="pill ok">کامل</span></td></tr>
+      <tr><td>۱۱</td><td>داشبورد و رابط کاربری</td><td><span class="pill ok">کامل · ۱۷ تست</span></td></tr>
+      <tr><td>۱۲</td><td>تست‌ها</td><td><span class="pill warn">در جریان</span></td></tr>
+      <tr><td>۱۳</td><td>استقرار و مستندات</td><td><span class="pill warn">باقی‌مانده</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>پیش‌نیازهای عملیاتی برای اجرای واقعی</h3>
+  <ul>
+    <li>حساب اینستاگرام باید <strong>Professional</strong> (Business یا Creator) و <strong>عمومی</strong> باشد.</li>
+    <li>دریافت رویداد کامنت نیازمند <strong>Advanced Access</strong>، تأیید کسب‌وکار و App Review است.</li>
+    <li>آدرس وبهوک باید HTTPS با گواهی معتبر باشد (self-signed پذیرفته نمی‌شود).</li>
+    <li>برای production مقدار <code>REDIS_URL</code> و <code>DATABASE_URL</code> باید تنظیم شوند.</li>
+  </ul>
+</section>
+
+<p class="foot">IGFlow · ساخته‌شده فقط با APIهای رسمی Instagram Platform · مستندات کامل در پوشهٔ <code>docs/</code></p>
+
+</div>
+</body>
+</html>
