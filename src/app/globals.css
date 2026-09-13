@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/* اسکرول‌بار ظریف */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-slate-300;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+/* اعداد در متن فارسی خواناتر باشند */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
