@@ -34,6 +34,7 @@ cp .env.example .env.production
 echo "AUTH_JWT_SECRET=$(openssl rand -base64 48)"
 echo "TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)"
 echo "IG_WEBHOOK_VERIFY_TOKEN=$(openssl rand -hex 24)"
+echo "CRON_SECRET=$(openssl rand -base64 48)"
 ```
 
 > ⚠️ `TOKEN_ENCRYPTION_KEY` باید **دقیقاً ۳۲ بایت** باشد. اگر بعداً عوضش کنید، تمام توکن‌های ذخیره‌شده غیرقابل رمزگشایی می‌شوند و همهٔ کاربران باید حساب اینستاگرام را دوباره وصل کنند. این کلید را مثل کلید دیتابیس نگه دارید.
@@ -48,6 +49,7 @@ REDIS_URL=redis://host:6379
 WEBHOOK_SIGNATURE_REQUIRED=true
 AUTH_COOKIE_CROSS_SITE=false
 IG_REDIRECT_URI=https://igflow.example.com/api/instagram/callback
+CRON_SECRET=<حداقل-۳۲-کاراکتر-تصادفی>
 ```
 
 ---
@@ -94,7 +96,7 @@ docker compose up -d --scale worker=3
 | Redis | Upstash |
 | Worker | Railway، Fly.io یا ECS |
 
-> ⚠️ **worker روی Vercel اجرا نمی‌شود.** پروسهٔ دائمی است و مدل serverless آن را پشتیبانی نمی‌کند. اگر فقط اپ را روی Vercel بگذارید و worker را فراموش کنید، وبهوک‌ها دریافت و ذخیره می‌شوند اما **هرگز پردازش نمی‌شوند** — و هیچ خطایی هم نمی‌بینید. این سکوت خطرناک است.
+> **worker روی Vercel اجرا نمی‌شود.** در حالت کم‌حجم، برنامه روی Vercel پردازش Webhook را با `after()` انجام می‌دهد و cron روزانه تور ایمنی است. برای Retry سریع، حجم بالاتر و تضمین پردازش قوی‌تر، Redis و worker جدا روی Railway/Fly.io/ECS را فعال کنید و `INLINE_WEBHOOK_PROCESSING=false` بگذارید.
 
 ```bash
 vercel --prod
@@ -186,7 +188,7 @@ gunzip -c backup-2026-09-12-1430.sql.gz | psql "$DATABASE_URL"
 **کیفیت**
 
 - [ ] `npm run build` موفق
-- [ ] `npm run test` — ۱۱۸ تست سبز
+- [ ] `npm run test` — همهٔ تست‌ها سبز
 - [ ] `npm run lint` بدون خطا
 - [ ] `npm run typecheck` بدون خطا
 

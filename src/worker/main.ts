@@ -51,6 +51,11 @@ async function main(): Promise<void> {
           await container.engine.continueRun(runId);
           break;
         }
+        case 'retry-run': {
+          const { runId } = job.data as unknown as ContinueRunJob;
+          await container.engine.retryRun(runId);
+          break;
+        }
         case 'refresh-tokens': {
           const result = await container.tokens.refreshExpiring(7);
           log.info('تازه‌سازی توکن‌ها انجام شد', result as unknown as Record<string, unknown>);
@@ -69,21 +74,43 @@ async function main(): Promise<void> {
 
   // زمان‌بند سادهٔ تازه‌سازی توکن — هر ۶ ساعت
   const SIX_HOURS = 6 * 60 * 60 * 1000;
-  const timer = setInterval(() => {
+  const tokenTimer = setInterval(() => {
     void container.queue
       .enqueue('refresh-tokens', {}, { jobId: `refresh:${new Date().toISOString().slice(0, 13)}` })
       .catch((err: Error) => log.error('زمان‌بندی تازه‌سازی توکن ناموفق بود', { error: err.message }));
   }, SIX_HOURS);
-  timer.unref?.();
+  tokenTimer.unref?.();
+
+  // تور ایمنی پایدار: اگر پروسه/Redis میان ثبت next_retry_at و اجرای job قطع شد،
+  // Runهای موعدرسیده از روی دیتابیس دوباره وارد صف می‌شوند.
+  const recoverDueRuns = async () => {
+    const dueRuns = await container.repos.runs.listDueRetries(100);
+    for (const run of dueRuns) {
+      await container.queue.enqueue(
+        'retry-run',
+        { runId: run.id },
+        { jobId: `run:${run.id}:due:${run.retry_count}` },
+      );
+    }
+    if (dueRuns.length) log.info('Retryهای موعدرسیده بازیابی شدند', { count: dueRuns.length });
+  };
+  const retryTimer = setInterval(() => {
+    void recoverDueRuns().catch((err: Error) =>
+      log.error('بازیابی Retryهای موعدرسیده ناموفق بود', { error: err.message }),
+    );
+  }, 60_000);
+  retryTimer.unref?.();
 
   // یک بار در ابتدای کار هم اجرا شود
   await container.queue.enqueue('refresh-tokens', {}, { jobId: `refresh:boot:${Date.now()}` });
+  await recoverDueRuns();
 
   log.info('✅ worker آماده است و منتظر کار می‌ماند');
 
   const shutdown = async (signal: string): Promise<void> => {
     log.info('دریافت سیگنال خاموشی — در حال بستن منابع', { signal });
-    clearInterval(timer);
+    clearInterval(tokenTimer);
+    clearInterval(retryTimer);
     try {
       await container.queue.close?.();
       await container.db.close();

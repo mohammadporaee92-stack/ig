@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getContainer } from '~/server/container';
 import { createLogger } from '~/lib/logger';
+import { env } from '~/lib/env';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,11 +23,14 @@ const log = createLogger('cron-maintenance');
  *      پردازش درون‌خطی (`after()`) به هر دلیلی ناتمام مانده باشد.
  *
  * امنیت: Vercel هدر `Authorization: Bearer $CRON_SECRET` را خودکار ارسال
- * می‌کند. اگر `CRON_SECRET` تعریف شده باشد، درخواست بدون آن رد می‌شود تا
- * کسی نتواند این مسیر را از بیرون صدا بزند.
+ * می‌کند. این کلید در production اجباری است و درخواست بدون آن رد می‌شود.
  */
 export async function GET(request: Request): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
+  const secret = env().CRON_SECRET;
+  if (!secret && env().isProd) {
+    log.error('CRON_SECRET در production تنظیم نشده است');
+    return new Response('Cron is not configured', { status: 503 });
+  }
   if (secret) {
     const auth = request.headers.get('authorization');
     if (auth !== `Bearer ${secret}`) {
@@ -35,7 +39,7 @@ export async function GET(request: Request): Promise<Response> {
     }
   }
 
-  const { tokens, repos, processor } = await getContainer();
+  const { tokens, repos, processor, engine } = await getContainer();
   const summary: Record<string, unknown> = {};
 
   // ۱) تازه‌سازی توکن‌ها
@@ -66,6 +70,25 @@ export async function GET(request: Request): Promise<Response> {
   } catch (e) {
     log.error('بازیابی رویدادهای جامانده ناموفق بود', { error: (e as Error).message });
     summary.stuckError = (e as Error).message;
+  }
+
+  // ۳) Retryهای Run که موعدشان رسیده (تور ایمنی BullMQ/Serverless)
+  try {
+    const dueRuns = await repos.runs.listDueRetries(25);
+    let retried = 0;
+    for (const run of dueRuns) {
+      try {
+        await engine.retryRun(run.id);
+        retried++;
+      } catch (e) {
+        log.error('Retry اجرای اتوماسیون ناموفق بود', { runId: run.id, error: (e as Error).message });
+      }
+    }
+    summary.dueRunsFound = dueRuns.length;
+    summary.dueRunsRetried = retried;
+  } catch (e) {
+    log.error('بازیابی Retryهای موعدرسیده ناموفق بود', { error: (e as Error).message });
+    summary.retryError = (e as Error).message;
   }
 
   log.info('نگهداری روزانه انجام شد', summary);

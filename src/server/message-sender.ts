@@ -111,16 +111,31 @@ export class MessageSender {
         messageId = res.message_id;
       } else {
         if (!req.igsid) throw new Error('igsid برای ارسال پیام مستقیم الزامی است');
-        // ۱) متن (+ دکمه‌ها)
-        const res = await this.client.sendMessage(token, req.igUserId, req.igsid, {
-          ...(text ? { text } : {}),
-          ...(req.quickReplies?.length ? { quick_replies: req.quickReplies.slice(0, 13) } : {}),
-        });
-        messageId = res.message_id;
-        // ۲) پیوست‌ها در پیام‌های جداگانه (طبق ساختار رسمی attachment)
-        for (const att of req.attachments ?? []) {
-          await this.rateLimiter.consume('messages', req.instagramAccountId);
-          await this.client.sendMessage(token, req.igUserId, req.igsid, { attachment: att });
+        // متن و هر پیوست یک پیام مستقل Instagram هستند. فراخواننده برای هر بخش
+        // idempotencySuffix جدا می‌دهد تا شکست پیوست باعث ارسال دوبارهٔ متن نشود.
+        const hasTextPart = Boolean(text || req.quickReplies?.length);
+        if (hasTextPart) {
+          const res = await this.client.sendMessage(token, req.igUserId, req.igsid, {
+            ...(text ? { text } : {}),
+            ...(req.quickReplies?.length ? { quick_replies: req.quickReplies.slice(0, 13) } : {}),
+          });
+          messageId = res.message_id;
+        }
+        for (const [index, att] of (req.attachments ?? []).entries()) {
+          // اولین بخش قبلاً یک سهمیه مصرف کرده است. اگر پیام فقط پیوست دارد،
+          // همان سهم اولیه برای پیوست اول استفاده می‌شود.
+          if (hasTextPart || index > 0) {
+            const attachmentDecision = await this.rateLimiter.consume('messages', req.instagramAccountId);
+            if (!attachmentDecision.allowed) {
+              return {
+                status: 'rate_limited',
+                retryAfterMs: attachmentDecision.retryAfterMs,
+                logId: claim.id,
+              };
+            }
+          }
+          const attachmentResult = await this.client.sendMessage(token, req.igUserId, req.igsid, { attachment: att });
+          messageId ??= attachmentResult.message_id;
         }
       }
 

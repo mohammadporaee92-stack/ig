@@ -44,7 +44,7 @@ export function buildContainer(db: Db, queue: Queue, igClient = new InstagramCli
     // 🔮 نقطهٔ توسعهٔ آینده
     .register(new InstagramOfficialFollowChecker());
 
-  const engine = new AutomationEngine({ repos, sender, followCheckers });
+  const engine = new AutomationEngine({ repos, sender, followCheckers, queue });
   const processor = new WebhookProcessor({ repos, engine, queue });
 
   return { db, repos, igClient, tokens, rateLimiter, sender, followCheckers, engine, processor, queue };

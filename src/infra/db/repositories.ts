@@ -702,6 +702,7 @@ export interface RunRow {
   error: string | null;
   error_code: string | null;
   retry_count: number;
+  next_retry_at: Date | null;
   started_at: Date;
   finished_at: Date | null;
 }
@@ -809,6 +810,20 @@ export class RunRepo {
     const res = await this.db.query<RunRow>(
       `SELECT * FROM automation_runs WHERE ${where} ORDER BY started_at DESC LIMIT $${limitIdx} OFFSET $${params.length}`,
       params,
+    );
+    return res.rows;
+  }
+
+  /** تلاش‌های موقتی که موعدشان رسیده؛ برای بازیابی پس از restart/Serverless. */
+  async listDueRetries(limit = 25): Promise<RunRow[]> {
+    const res = await this.db.query<RunRow>(
+      `SELECT * FROM automation_runs
+        WHERE next_retry_at IS NOT NULL
+          AND next_retry_at <= now()
+          AND status NOT IN ('completed','failed','skipped')
+        ORDER BY next_retry_at ASC
+        LIMIT $1`,
+      [Math.min(Math.max(limit, 1), 200)],
     );
     return res.rows;
   }

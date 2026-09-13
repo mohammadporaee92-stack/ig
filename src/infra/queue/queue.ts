@@ -6,6 +6,7 @@ const log = createLogger('queue');
 export interface JobPayload {
   'process-webhook-event': { webhookEventId: string };
   'continue-run': { runId: string; trigger: 'quick_reply' | 'message' | 'retry' };
+  'retry-run': { runId: string };
   'refresh-tokens': Record<string, never>;
 }
 

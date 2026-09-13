@@ -10,6 +10,8 @@ import {
 } from '~/domain/automation/webhook-parser';
 import type { AutomationRow, Repositories, RunRow, TemplateRow } from '~/infra/db/repositories';
 import type { Attachment, QuickReply } from '~/infra/instagram/client';
+import type { Queue } from '~/infra/queue/queue';
+import { env } from '~/lib/env';
 import { createLogger } from '~/lib/logger';
 import type { MessageSender } from './message-sender';
 
@@ -34,6 +36,7 @@ export interface EngineDeps {
   repos: Repositories;
   sender: MessageSender;
   followCheckers: FollowCheckerRegistry;
+  queue: Queue;
 }
 
 interface TemplateBundle {
@@ -73,6 +76,91 @@ function recheckButton(runId: string, title = '🔄 بررسی مجدد'): Quick
 
 export class AutomationEngine {
   constructor(private readonly deps: EngineDeps) {}
+
+  /**
+   * تلاش مجدد پایدار برای Runهایی که به‌خاطر rate limit یا خطای موقت متوقف شدند.
+   * وضعیت Run تعیین می‌کند باید تماس اول تکرار شود یا ادامهٔ Follow/Main Message.
+   */
+  async retryRun(runId: string): Promise<void> {
+    const run = await this.deps.repos.runs.findById(runId);
+    if (!run || ['completed', 'failed', 'skipped'].includes(run.status)) return;
+    if (run.next_retry_at && new Date(run.next_retry_at).getTime() > Date.now()) return;
+
+    await this.deps.repos.runs.patch(run.id, { next_retry_at: null, error: null });
+    const automation = await this.deps.repos.automations.findById(run.user_id, run.automation_id);
+    if (!automation) return;
+
+    if (run.status === RunStatus.KeywordMatched || run.status === RunStatus.PublicReplySent) {
+      if (!run.comment_id || !run.igsid) return;
+      const account = await this.deps.repos.accounts.findByIdUnscoped(run.instagram_account_id);
+      if (!account) return;
+      await this.executeFirstContact(automation, run, {
+        type: 'comment',
+        igUserId: account.ig_user_id,
+        commentId: run.comment_id,
+        mediaId: run.media_id ?? undefined,
+        fromIgsid: run.igsid,
+        fromUsername: run.username ?? undefined,
+        text: run.comment_text ?? '',
+        isFromSelf: false,
+        providerEventId: run.comment_id,
+      });
+      return;
+    }
+
+    await this.continueRun(run.id);
+  }
+
+  private async scheduleRetry(
+    run: RunRow,
+    resumeStatus: string,
+    error: string,
+    delayMs: number,
+  ): Promise<boolean> {
+    const attempt = (run.retry_count ?? 0) + 1;
+    const maxAttempts = env().RETRY_MAX_ATTEMPTS;
+    if (attempt > maxAttempts) {
+      await this.deps.repos.runs.patch(run.id, {
+        status: RunStatus.Failed,
+        error,
+        error_code: 'retry_exhausted',
+        retry_count: attempt - 1,
+        next_retry_at: null,
+        finished_at: new Date(),
+      });
+      await this.deps.repos.runEvents.log({
+        userId: run.user_id,
+        runId: run.id,
+        level: 'error',
+        code: 'retry_exhausted',
+        message: `پس از ${maxAttempts} تلاش، عملیات ناموفق ماند: ${error}`,
+      });
+      return false;
+    }
+
+    const safeDelay = Math.max(1_000, delayMs);
+    await this.deps.repos.runs.patch(run.id, {
+      status: resumeStatus,
+      error,
+      error_code: 'retry_scheduled',
+      retry_count: attempt,
+      next_retry_at: new Date(Date.now() + safeDelay),
+      finished_at: null,
+    });
+    await this.deps.repos.runEvents.log({
+      userId: run.user_id,
+      runId: run.id,
+      level: 'warn',
+      code: 'retry_scheduled',
+      message: `تلاش مجدد ${attempt}/${maxAttempts} در ${Math.ceil(safeDelay / 1000)} ثانیه`,
+    });
+    await this.deps.queue.enqueue(
+      'retry-run',
+      { runId: run.id },
+      { delayMs: safeDelay, jobId: `run:${run.id}:retry:${attempt}` },
+    );
+    return true;
+  }
 
   /* ════════════════════════════════════════════════════════
    *  مسیر ۱ — کامنت جدید
@@ -238,6 +326,15 @@ export class AutomationEngine {
         data: { status: out.status },
       });
       if (out.status === 'sent') await repos.runs.patch(run.id, { status: RunStatus.PublicReplySent });
+      if (out.status === 'rate_limited' || (out.status === 'failed' && out.retryable)) {
+        await this.scheduleRetry(
+          run,
+          RunStatus.KeywordMatched,
+          out.status === 'rate_limited' ? 'API Rate Limit هنگام پاسخ عمومی' : out.error,
+          out.status === 'rate_limited' ? out.retryAfterMs : env().retryBackoffMs[run.retry_count] ?? 5_000,
+        );
+        return;
+      }
     }
 
     // ── Private Reply (نقطهٔ شروع DM) ──
@@ -274,7 +371,7 @@ export class AutomationEngine {
       privateReplyCommentId: event.commentId,
     });
 
-    if (out.status === 'sent') {
+    if (out.status === 'sent' || (out.status === 'skipped' && out.reason === 'already_sent')) {
       await repos.runs.patch(run.id, {
         status: needsInteraction ? RunStatus.AwaitingUserInteraction : RunStatus.Completed,
         delivered: !needsInteraction,
@@ -292,16 +389,13 @@ export class AutomationEngine {
             'تنها پس از پاسخ یا زدن دکمه توسط کاربر ممکن است.',
         });
       }
-    } else if (out.status === 'rate_limited') {
-      await repos.runs.patch(run.id, {
-        status: RunStatus.KeywordMatched,
-        error: 'rate limited',
-        next_retry_at: new Date(Date.now() + out.retryAfterMs),
-      });
-      await repos.runEvents.log({
-        userId: run.user_id, runId: run.id, level: 'warn', code: 'rate_limited',
-        message: `محدودیت نرخ API — تلاش مجدد در ${Math.ceil(out.retryAfterMs / 1000)} ثانیه`,
-      });
+    } else if (out.status === 'rate_limited' || (out.status === 'failed' && out.retryable)) {
+      await this.scheduleRetry(
+        run,
+        RunStatus.KeywordMatched,
+        out.status === 'rate_limited' ? 'API Rate Limit هنگام پیام خصوصی' : out.error,
+        out.status === 'rate_limited' ? out.retryAfterMs : env().retryBackoffMs[run.retry_count] ?? 5_000,
+      );
     } else if (out.status === 'failed') {
       await repos.runs.patch(run.id, {
         status: RunStatus.Failed, error: out.error, error_code: out.code ?? null, finished_at: new Date(),
@@ -475,6 +569,24 @@ export class AutomationEngine {
         igsid: run.igsid,
       });
 
+      if (out.status === 'rate_limited' || (out.status === 'failed' && out.retryable)) {
+        await this.scheduleRetry(
+          run,
+          RunStatus.FollowChecked,
+          out.status === 'rate_limited' ? 'API Rate Limit هنگام پیام Follow Gate' : out.error,
+          out.status === 'rate_limited' ? out.retryAfterMs : env().retryBackoffMs[run.retry_count] ?? 5_000,
+        );
+        return;
+      }
+      if (out.status === 'failed') {
+        await repos.runs.patch(run.id, {
+          status: RunStatus.Failed,
+          error: out.error,
+          error_code: out.code ?? null,
+          finished_at: new Date(),
+        });
+        return;
+      }
       await repos.runs.patch(run.id, {
         status: RunStatus.FollowGateSent,
         follow_recheck_count: recheckCount + 1,
@@ -506,37 +618,78 @@ export class AutomationEngine {
       )
       .filter((a) => 'attachment_id' in a.payload || Boolean((a.payload as { url: string }).url));
 
-    const out = await sender.send({
-      userId: run.user_id,
-      instagramAccountId: account.id,
-      igUserId: account.ig_user_id,
-      runId: run.id,
-      kind: 'main',
-      text: renderTemplate(mainBody, ctx),
-      attachments,
-      igsid: run.igsid,
-    });
+    const customMainQr = parseJson<Array<{ title?: string; payload?: string }>>(
+      templates.main?.quick_replies,
+      [],
+    )
+      .filter((q) => q.title?.trim())
+      .slice(0, 13)
+      .map((q, index): QuickReply => ({
+        content_type: 'text',
+        title: (q.title ?? '').slice(0, 20),
+        payload: q.payload?.trim() || `IGFLOW_MAIN_${run.id}_${index}`,
+      }));
+
+    const outcomes: Awaited<ReturnType<MessageSender['send']>>[] = [];
+    const renderedMain = renderTemplate(mainBody, ctx);
+    if (renderedMain || customMainQr.length) {
+      outcomes.push(await sender.send({
+        userId: run.user_id,
+        instagramAccountId: account.id,
+        igUserId: account.ig_user_id,
+        runId: run.id,
+        idempotencySuffix: 'text',
+        kind: 'main',
+        text: renderedMain,
+        quickReplies: customMainQr,
+        igsid: run.igsid,
+      }));
+    }
+    for (const [index, attachment] of attachments.entries()) {
+      const previous = outcomes[outcomes.length - 1];
+      if (previous?.status === 'rate_limited' || previous?.status === 'failed') break;
+      outcomes.push(await sender.send({
+        userId: run.user_id,
+        instagramAccountId: account.id,
+        igUserId: account.ig_user_id,
+        runId: run.id,
+        idempotencySuffix: `attachment:${index}`,
+        kind: 'main',
+        text: '',
+        attachments: [attachment],
+        igsid: run.igsid,
+      }));
+      const latest = outcomes[outcomes.length - 1];
+      if (latest?.status === 'rate_limited' || latest?.status === 'failed') break;
+    }
+
+    const out = outcomes.find((item) => item.status === 'rate_limited')
+      ?? outcomes.find((item) => item.status === 'failed')
+      ?? outcomes.find((item) => item.status === 'sent')
+      ?? outcomes[0];
+
+    if (!out) {
+      await repos.runs.patch(run.id, { status: RunStatus.Completed, delivered: true, finished_at: new Date() });
+      return;
+    }
 
     if (out.status === 'sent' || out.status === 'skipped') {
       await repos.runs.patch(run.id, {
         status: RunStatus.Completed,
-        delivered: out.status === 'sent',
+        delivered: true,
         finished_at: new Date(),
       });
       await repos.runEvents.log({
         userId: run.user_id, runId: run.id, level: 'success', code: 'main_message_sent',
         message: out.status === 'sent' ? 'پیام اصلی با موفقیت ارسال شد 🎉' : 'پیام اصلی قبلاً ارسال شده بود',
       });
-    } else if (out.status === 'rate_limited') {
-      await repos.runs.patch(run.id, {
-        status: RunStatus.FollowChecked,
-        next_retry_at: new Date(Date.now() + out.retryAfterMs),
-        error: 'API Rate Limit',
-      });
-      await repos.runEvents.log({
-        userId: run.user_id, runId: run.id, level: 'warn', code: 'rate_limited',
-        message: 'Message Failed ❌ — Reason: API Rate Limit',
-      });
+    } else if (out.status === 'rate_limited' || (out.status === 'failed' && out.retryable)) {
+      await this.scheduleRetry(
+        run,
+        RunStatus.FollowChecked,
+        out.status === 'rate_limited' ? 'API Rate Limit هنگام پیام اصلی' : out.error,
+        out.status === 'rate_limited' ? out.retryAfterMs : env().retryBackoffMs[run.retry_count] ?? 5_000,
+      );
     } else {
       await repos.runs.patch(run.id, {
         status: RunStatus.Failed, error: out.error, error_code: out.code ?? null, finished_at: new Date(),
