@@ -98,6 +98,8 @@ export async function createWorld(): Promise<TestWorld> {
       await container.processor.process((job.data as { webhookEventId: string }).webhookEventId);
     } else if (job.name === 'continue-run') {
       await container.engine.continueRun((job.data as { runId: string }).runId);
+    } else if (job.name === 'retry-run') {
+      await container.engine.retryRun((job.data as { runId: string }).runId);
     }
   });
 

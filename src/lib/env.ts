@@ -52,6 +52,7 @@ const schema = z.object({
    * خالی = تشخیص خودکار (روی Vercel روشن، جای دیگر خاموش).
    */
   INLINE_WEBHOOK_PROCESSING: z.string().default(''),
+  CRON_SECRET: z.string().default(''),
 
   REDIS_URL: z.string().default(''),
   QUEUE_PREFIX: z.string().default('igflow'),

@@ -3,6 +3,7 @@ import { getContainer } from '~/server/container';
 import { verifyState } from '~/lib/crypto';
 import { env } from '~/lib/env';
 import { createLogger } from '~/lib/logger';
+import { getCurrentUser } from '~/server/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,15 @@ export async function GET(request: Request): Promise<Response> {
     return back('/instagram?error=invalid_state');
   }
   const userId = claims.uid;
+
+  // state باید علاوه بر امضا، به همان سشن مرورگری که اتصال را آغاز کرده متصل باشد.
+  // این بررسی مانع Login-CSRF می‌شود؛ مهاجم نمی‌تواند URL مجوز حساب خودش را
+  // برای مرورگر کاربر دیگری بفرستد و حساب اینستاگرام قربانی را به tenant خود وصل کند.
+  const currentUser = await getCurrentUser();
+  if (!currentUser || currentUser.sub !== userId) {
+    log.warn('سشن callback با آغازکنندهٔ OAuth مطابقت ندارد');
+    return back('/instagram?error=invalid_state');
+  }
 
   const { igClient, repos, tokens } = await getContainer();
 

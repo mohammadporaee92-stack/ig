@@ -103,6 +103,45 @@ describe('Automation Flow — مسیر کامل', () => {
     expect(await repos.runs.listByUser(world.userId)).toHaveLength(1);
   });
 
+  it('خطای موقت ارسال، Run را زمان‌بندی و در تلاش بعدی کامل می‌کند', async () => {
+    let attempts = 0;
+    world.ig.handlers.push({
+      match: (url, method) => method === 'POST' && url.includes('/messages'),
+      respond: () => {
+        attempts++;
+        if (attempts === 1) {
+          return {
+            status: 429,
+            body: { error: { code: 4, message: 'Application request limit reached' } },
+          };
+        }
+        return { body: { recipient_id: 'igsid_user_1', message_id: 'mid_retry_ok' } };
+      },
+    });
+    await createAutomation(world, { publicReply: null });
+
+    await ingest(commentWebhook({ igUserId: world.igUserId, commentId: 'retry_run_1', text: 'CHATGPT' }));
+
+    const repos = createRepositories(world.db);
+    const run = (await repos.runs.listByUser(world.userId))[0]!;
+    expect(run.status).toBe('keyword_matched');
+    expect(run.retry_count).toBe(1);
+    expect(run.next_retry_at).toBeInstanceOf(Date);
+
+    // زمان Retry-After متا را برای اجرای سریع تست منقضی می‌کنیم.
+    await world.db.query(
+      `UPDATE rate_limit_buckets SET retry_after = NULL, tokens = 10 WHERE bucket_key = $1`,
+      [`private_replies:${world.accountId}`],
+    );
+    await repos.runs.patch(run.id, { next_retry_at: new Date(Date.now() - 1) });
+    await world.container.engine.retryRun(run.id);
+
+    const completed = await repos.runs.findById(run.id);
+    expect(completed?.status).toBe('awaiting_user_interaction');
+    expect(completed?.next_retry_at).toBeNull();
+    expect(attempts).toBe(2);
+  });
+
   it('once_per_user_per_post: کامنت دوم همان کاربر روی همان پست اجرا نمی‌شود', async () => {
     mockSend();
     await createAutomation(world, { oncePerUserPerPost: true });

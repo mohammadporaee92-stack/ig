@@ -48,6 +48,45 @@ export const automationInputSchema = z.object({
     followGate: messageSchema.default({ body: '', attachments: [], quickReplies: [] }),
     main: messageSchema.default({ body: '', attachments: [], quickReplies: [] }),
   }),
+}).superRefine((input, ctx) => {
+  // پیش‌نویس می‌تواند ناقص باشد؛ Automation فعال باید حتماً یک Flow قابل اجرا بسازد.
+  if (input.status !== 'active') return;
+
+  const issue = (path: Array<string | number>, message: string) =>
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+
+  if (input.targetScope === 'specific_posts' && input.targetMediaIds.length === 0) {
+    issue(['targetMediaIds'], 'برای محدودهٔ پست مشخص، حداقل یک Media ID لازم است');
+  }
+  if (input.publicReplyEnabled && !input.messages.publicReply.body.trim()) {
+    issue(['messages', 'publicReply', 'body'], 'متن پاسخ عمومی نمی‌تواند خالی باشد');
+  }
+
+  const mainHasContent = Boolean(
+    input.messages.main.body.trim() || input.messages.main.attachments.length,
+  );
+  if (!mainHasContent) {
+    issue(['messages', 'main'], 'محتوای اصلی نمی‌تواند خالی باشد');
+  }
+  if (!input.privateReplyEnabled) {
+    issue(
+      ['privateReplyEnabled'],
+      'برای ارسال محتوای اصلی، Private Reply باید فعال باشد تا کاربر بتواند تعامل کند',
+    );
+  } else {
+    if (!input.messages.privateReply.body.trim()) {
+      issue(['messages', 'privateReply', 'body'], 'متن Private Reply نمی‌تواند خالی باشد');
+    }
+    if (mainHasContent && input.messages.privateReply.quickReplies.length === 0) {
+      issue(
+        ['messages', 'privateReply', 'quickReplies'],
+        'حداقل یک Quick Reply برای بازشدن پنجرهٔ ادامهٔ گفتگو لازم است',
+      );
+    }
+  }
+  if (input.followGateEnabled && !input.messages.followGate.body.trim()) {
+    issue(['messages', 'followGate', 'body'], 'متن Follow Gate نمی‌تواند خالی باشد');
+  }
 });
 
 export type AutomationInput = z.infer<typeof automationInputSchema>;

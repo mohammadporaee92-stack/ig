@@ -296,6 +296,7 @@ npm run worker
 |---|---|
 | `IG_WEBHOOK_VERIFY_TOKEN` | همان رشته‌ای که در داشبورد Meta وارد می‌کنید |
 | `WEBHOOK_SIGNATURE_REQUIRED` | در production حتماً `true` |
+| `CRON_SECRET` | کلید حداقل ۳۲ کاراکتری برای محافظت از مسیر نگهداری و Retry |
 
 ### زیرساخت
 
@@ -491,7 +492,7 @@ npm run dev          # سرور توسعه (پورت ۳۰۰۰)
 npm run worker       # worker صف — ترمینال جداگانه
 npm run typecheck    # بررسی نوع‌ها
 npm run lint         # ESLint
-npm run test         # ۱۱۸ تست
+npm run test         # مجموعهٔ کامل تست‌های خودکار
 npm run doctor       # بررسی سلامت محیط
 npm run build        # بیلد تولیدی
 ```
@@ -506,7 +507,7 @@ npm run build        # بیلد تولیدی
 npm run test
 ```
 
-**۱۱۸ تست در ۷ فایل:**
+**تست‌های خودکار در ۷ فایل:**
 
 | فایل | پوشش |
 |---|---|
@@ -740,7 +741,7 @@ igflow/
 │   ├── server/                 سرویس‌های لایهٔ کاربرد
 │   ├── worker/                 پردازش پس‌زمینه
 │   └── lib/                    env، crypto، logger، utils
-├── tests/                      ۱۱۸ تست
+├── tests/                      تست‌های خودکار
 ├── scripts/                    migrate، seed، doctor
 └── docs/
     ├── 01-capability-audit.md  ممیزی قابلیت‌های رسمی

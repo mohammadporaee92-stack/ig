@@ -114,6 +114,49 @@ describe('اعتبارسنجی ورودی اتوماسیون', () => {
   it('سیاست نامعتبر برای وضعیت فالو رد می‌شود', () => {
     expect(() => automationInputSchema.parse({ ...base, followUnknownPolicy: 'ban_user' })).toThrow();
   });
+
+  it('پیش‌نویس ناقص ذخیره می‌شود ولی همان Flow در حالت active رد می‌شود', () => {
+    const incomplete = {
+      ...base,
+      messages: { ...base.messages, main: { body: '' } },
+    };
+    expect(automationInputSchema.parse(incomplete).status).toBe('draft');
+    expect(() => automationInputSchema.parse({ ...incomplete, status: 'active' })).toThrow(/اصلی/);
+  });
+
+  it('اتوماسیون فعال با پست‌های مشخص بدون Media ID رد می‌شود', () => {
+    expect(() => automationInputSchema.parse({
+      ...base,
+      status: 'active',
+      targetScope: 'specific_posts',
+      targetMediaIds: [],
+    })).toThrow(/Media ID/);
+  });
+
+  it('اتوماسیون فعال بدون Private Reply یا دکمهٔ ادامه رد می‌شود', () => {
+    expect(() => automationInputSchema.parse({
+      ...base,
+      status: 'active',
+      privateReplyEnabled: false,
+    })).toThrow(/Private Reply/);
+
+    expect(() => automationInputSchema.parse({
+      ...base,
+      status: 'active',
+      messages: {
+        ...base.messages,
+        privateReply: { body: 'سلام', quickReplies: [] },
+      },
+    })).toThrow(/Quick Reply/);
+  });
+
+  it('اتوماسیون فعال با Follow Gate خالی رد می‌شود', () => {
+    expect(() => automationInputSchema.parse({
+      ...base,
+      status: 'active',
+      followGateEnabled: true,
+    })).toThrow(/Follow Gate/);
+  });
 });
 
 describe('کوئری‌های داشبورد', () => {

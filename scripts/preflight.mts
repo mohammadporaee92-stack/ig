@@ -28,14 +28,45 @@ if (!existsSync(join(ROOT, 'node_modules', 'next'))) {
   die('وابستگی‌ها نصب نشده‌اند.', `اجرا کنید:  ${dim('npm install')}`);
 }
 
-/* ۲. فایل محیط */
-if (!existsSync(join(ROOT, '.env.local'))) {
+const isProduction = process.env.NODE_ENV === 'production';
+
+/* ۲. تنظیمات محیط */
+if (isProduction) {
+  // در Docker/Vercel متغیرها مستقیماً تزریق می‌شوند و .env.local عمداً وجود ندارد.
+  const required = [
+    'APP_URL',
+    'AUTH_JWT_SECRET',
+    'TOKEN_ENCRYPTION_KEY',
+    'DATABASE_URL',
+    'IG_APP_ID',
+    'IG_APP_SECRET',
+    'IG_REDIRECT_URI',
+    'IG_WEBHOOK_VERIFY_TOKEN',
+    'CRON_SECRET',
+  ];
+  const missing = required.filter((key) => !process.env[key]?.trim());
+  if (missing.length) {
+    die('متغیرهای الزامی production تنظیم نشده‌اند.', `موارد ناقص: ${missing.join(', ')}`);
+  }
+  if (process.env.WEBHOOK_SIGNATURE_REQUIRED === 'false') {
+    die('امضای Webhook در production نباید غیرفعال باشد.', 'WEBHOOK_SIGNATURE_REQUIRED=true');
+  }
+  if (!process.env.APP_URL?.startsWith('https://') || !process.env.IG_REDIRECT_URI?.startsWith('https://')) {
+    die('آدرس‌های production باید HTTPS باشند.', 'APP_URL و IG_REDIRECT_URI را با https:// تنظیم کنید');
+  }
+  if ((process.env.AUTH_JWT_SECRET?.length ?? 0) < 32 || (process.env.CRON_SECRET?.length ?? 0) < 32) {
+    die('کلیدهای production بیش از حد کوتاه‌اند.', 'AUTH_JWT_SECRET و CRON_SECRET باید حداقل ۳۲ کاراکتر باشند');
+  }
+  if (Buffer.from(process.env.TOKEN_ENCRYPTION_KEY ?? '', 'base64').length !== 32) {
+    die('TOKEN_ENCRYPTION_KEY نامعتبر است.', 'یک کلید دقیقاً ۳۲ بایتی بسازید: openssl rand -base64 32');
+  }
+} else if (!existsSync(join(ROOT, '.env.local'))) {
   die('فایل .env.local وجود ندارد.', `اجرا کنید:  ${dim('npm run setup')}`);
 }
 
 /* ۳. دیتابیس */
-const envText = readFileSync(join(ROOT, '.env.local'), 'utf8');
-const usesExternalDb = /^DATABASE_URL=.+/m.test(envText);
+const envText = isProduction ? '' : readFileSync(join(ROOT, '.env.local'), 'utf8');
+const usesExternalDb = isProduction || /^DATABASE_URL=.+/m.test(envText);
 
 if (!usesExternalDb) {
   const dbDir = join(ROOT, '.data', 'pglite');

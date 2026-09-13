@@ -99,8 +99,9 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ ok: true, accepted: result.accepted, duplicates: result.duplicates }, { status: 200 });
   } catch (e) {
     log.error('خطا در دریافت Webhook', { error: (e as Error).message });
-    // همچنان ۲۰۰ — چون متا در غیر این صورت طوفان retry راه می‌اندازد.
-    // رویداد در DB ثبت نشده باشد، در لاگ هست و قابل بازیابی است.
-    return NextResponse.json({ ok: true }, { status: 200 });
+    // فقط بعد از ذخیرهٔ پایدار می‌توانیم ۲۰۰ بدهیم. در خطای DB/صف، پاسخ 503
+    // باعث می‌شود Meta رویداد را دوباره بفرستد؛ idempotency تکرار را بی‌خطر می‌کند.
+    // پاسخ ۲۰۰ در این نقطه مساوی از دست رفتن غیرقابل‌بازیابی رویداد است.
+    return NextResponse.json({ ok: false }, { status: 503 });
   }
 }
