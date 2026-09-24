@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -8,12 +8,26 @@ import {
   Input, Label, Select, Switch,
 } from '~/components/ui';
 import { cn } from '~/lib/utils';
-import { apiPost, apiPut } from '~/lib/api-client';
+import { apiFetch, apiPost, apiPut } from '~/lib/api-client';
 import { MessageEditor } from './message-editor';
 import { FlowPreview } from './flow-preview';
 import { WIZARD_STEPS, defaultDraft, type AutomationDraft } from './types';
 
 export interface AccountOption { id: string; username: string; provider?: string }
+
+interface ZernioPostOption {
+  id: string;
+  caption?: string;
+  mediaType?: string;
+  thumbnailUrl?: string;
+  permalink?: string;
+  timestamp?: string;
+}
+
+interface ZernioPostsResponse {
+  posts: ZernioPostOption[];
+}
+
 
 function byteLength(s: string): number {
   return new TextEncoder().encode(s).length;
@@ -72,7 +86,33 @@ export function AutomationWizard({
   const [negativeInput, setNegativeInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [postOptions, setPostOptions] = useState<ZernioPostOption[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsError, setPostsError] = useState<string | null>(null);
   const selectedProvider = accounts.find((account) => account.id === draft.instagramAccountId)?.provider ?? 'meta';
+
+  useEffect(() => {
+    if (step !== 2 || draft.targetScope !== 'specific_posts' || selectedProvider !== 'zernio' || !draft.instagramAccountId) {
+      return;
+    }
+    let cancelled = false;
+    setPostsLoading(true);
+    setPostsError(null);
+    void apiFetch<ZernioPostsResponse>(`/api/zernio/posts?accountId=${encodeURIComponent(draft.instagramAccountId)}`)
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setPostOptions([]);
+          setPostsError(res.error);
+          return;
+        }
+        setPostOptions(res.data.posts ?? []);
+      })
+      .finally(() => {
+        if (!cancelled) setPostsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [step, draft.targetScope, draft.instagramAccountId, selectedProvider]);
 
   const set = <K extends keyof AutomationDraft>(key: K, value: AutomationDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
@@ -219,16 +259,106 @@ export function AutomationWizard({
                 </div>
 
                 {draft.targetScope === 'specific_posts' ? (
-                  <div>
-                    <Label>شناسهٔ رسانه (Media ID) — با کاما جدا کنید</Label>
-                    <Input
-                      dir="ltr"
-                      value={draft.targetMediaIds.join(',')}
-                      onChange={(e) => set('targetMediaIds', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
-                      placeholder="17912345678901234, 17998765432109876"
-                    />
-                    <p className="mt-1 text-xs text-slate-400">اگر خالی بماند، همهٔ پست‌ها در نظر گرفته می‌شوند.</p>
-                  </div>
+                  selectedProvider === 'zernio' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <Label>انتخاب پست یا ریلز</Label>
+                        <p className="mt-1 text-xs text-slate-400">
+                          برای حساب Zernio هر اتوماسیون فقط به یک پست یا ریلز مشخص متصل می‌شود.
+                        </p>
+                      </div>
+
+                      {postsLoading ? (
+                        <div className="rounded-lg border border-slate-200 p-4 text-sm text-slate-500">
+                          در حال دریافت پست‌ها از Zernio…
+                        </div>
+                      ) : null}
+
+                      {postsError ? (
+                        <Alert variant="warning">
+                          {postsError}
+                        </Alert>
+                      ) : null}
+
+                      {!postsLoading && !postsError && postOptions.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+                          پستی برای این حساب پیدا نشد. در صورت نیاز «همهٔ پست‌ها» را انتخاب کنید.
+                        </div>
+                      ) : null}
+
+                      {postOptions.length > 0 ? (
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          {postOptions.map((post) => {
+                            const selected = draft.targetMediaIds[0] === post.id;
+                            return (
+                              <button
+                                key={post.id}
+                                type="button"
+                                onClick={() => set('targetMediaIds', [post.id])}
+                                className={cn(
+                                  'overflow-hidden rounded-xl border text-right transition',
+                                  selected
+                                    ? 'border-brand-500 ring-2 ring-brand-100'
+                                    : 'border-slate-200 hover:border-brand-300',
+                                )}
+                              >
+                                <div className="aspect-square bg-slate-100">
+                                  {post.thumbnailUrl ? (
+                                    <img
+                                      src={post.thumbnailUrl}
+                                      alt=""
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full items-center justify-center text-3xl text-slate-300">
+                                      {post.mediaType === 'VIDEO' || post.mediaType === 'REEL' ? '🎬' : '🖼️'}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="space-y-1 p-3">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <Badge variant={selected ? 'success' : 'muted'}>
+                                      {selected ? 'انتخاب‌شده' : (post.mediaType || 'POST')}
+                                    </Badge>
+                                    {post.timestamp ? (
+                                      <span className="text-[11px] text-slate-400">
+                                        {new Date(post.timestamp).toLocaleDateString('fa-IR')}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <p className="line-clamp-2 min-h-10 text-xs leading-5 text-slate-600">
+                                    {post.caption?.trim() || 'بدون کپشن'}
+                                  </p>
+                                  <p dir="ltr" className="truncate text-[10px] text-slate-400">{post.id}</p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+
+                      {draft.targetMediaIds[0] ? (
+                        <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                          <span>Media ID انتخاب‌شده: <span dir="ltr">{draft.targetMediaIds[0]}</span></span>
+                          <button type="button" className="font-medium underline" onClick={() => set('targetMediaIds', [])}>
+                            پاک‌کردن
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div>
+                      <Label>شناسهٔ رسانه (Media ID) — با کاما جدا کنید</Label>
+                      <Input
+                        dir="ltr"
+                        value={draft.targetMediaIds.join(',')}
+                        onChange={(e) => set('targetMediaIds', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+                        placeholder="17912345678901234, 17998765432109876"
+                      />
+                    </div>
+                  )
                 ) : null}
               </>
             ) : null}
