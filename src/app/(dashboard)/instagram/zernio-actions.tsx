@@ -58,11 +58,7 @@ export function ZernioImportAction({
             return (
               <div key={account.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  {account.profilePictureUrl ? (
-                    <img src={account.profilePictureUrl} alt="" className="h-10 w-10 rounded-full object-cover" />
-                  ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">📸</div>
-                  )}
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">📸</div>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span dir="ltr" className="font-medium text-slate-800">@{account.username}</span>
