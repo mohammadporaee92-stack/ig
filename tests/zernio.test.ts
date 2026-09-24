@@ -78,6 +78,39 @@ describe('Zernio API client', () => {
     expect(health.tokenStatus?.valid).toBe(true);
   });
 
+  it('پست‌های اینستاگرام را برای Post Picker با cursor دریافت می‌کند', async () => {
+    const fetchMock = vi.fn(async (input: string) => {
+      expect(input).toBe('https://zernio.test/api/v1/ads/instagram-posts?accountId=acc_1&limit=30&after=cursor_1');
+      return new Response(JSON.stringify({
+        igUserId: '17841400000000000',
+        username: 'mohammad_por_ai',
+        posts: [
+          {
+            id: '18050809559368305',
+            caption: 'Launch day',
+            mediaType: 'VIDEO',
+            thumbnailUrl: 'https://example.com/thumb.jpg',
+            permalink: 'https://www.instagram.com/reel/ABCdef/',
+            timestamp: '2026-09-18T09:00:00+0000',
+          },
+        ],
+        paging: { after: 'cursor_2' },
+      }), { status: 200 });
+    });
+
+    const page = await new ZernioClient(fetchMock).listInstagramPosts('acc_1', {
+      limit: 30,
+      after: 'cursor_1',
+    });
+
+    expect(page.posts).toHaveLength(1);
+    expect(page.posts[0]).toMatchObject({
+      id: '18050809559368305',
+      mediaType: 'VIDEO',
+    });
+    expect(page.paging?.after).toBe('cursor_2');
+  });
+
   it('خطای Zernio را بدون افشای کلید طبقه‌بندی می‌کند', async () => {
     const client = new ZernioClient(async () => new Response(
       JSON.stringify({ error: 'Invalid API key', code: 'UNAUTHORIZED' }),
