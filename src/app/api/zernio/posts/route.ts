@@ -7,8 +7,6 @@ export const dynamic = 'force-dynamic';
 export const GET = withAuth(async ({ user, container, request }) => {
   const url = new URL(request.url);
   const accountId = url.searchParams.get('accountId')?.trim() ?? '';
-  const after = url.searchParams.get('after')?.trim() || undefined;
-
   if (!accountId) return error('شناسهٔ حساب الزامی است', 400);
 
   const account = await container.repos.accounts.findById(user.sub, accountId);
@@ -18,10 +16,7 @@ export const GET = withAuth(async ({ user, container, request }) => {
   }
 
   try {
-    const result = await container.zernioClient.listInstagramPosts(
-      account.provider_account_id,
-      { limit: 30, after },
-    );
+    const result = await container.zernioClient.listInstagramPosts(account.provider_account_id);
     return json(result);
   } catch (err) {
     if (err instanceof ZernioApiError) {
