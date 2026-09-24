@@ -47,12 +47,7 @@ export interface ZernioInstagramPost {
 }
 
 export interface ZernioInstagramPostsPage {
-  igUserId?: string;
-  username?: string;
   posts: ZernioInstagramPost[];
-  paging?: {
-    after?: string;
-  };
 }
 
 export type ZernioMatchMode = 'contains' | 'word' | 'exact';
@@ -201,21 +196,33 @@ export class ZernioClient {
     return this.request<ZernioAccountHealth>(`/accounts/${encodeURIComponent(accountId)}/health`);
   }
 
-  async listInstagramPosts(
-    accountId: string,
-    options: { limit?: number; after?: string } = {},
-  ): Promise<ZernioInstagramPostsPage> {
-    const params = new URLSearchParams({
-      accountId,
-      limit: String(Math.min(100, Math.max(1, options.limit ?? 25))),
+  async listInstagramPosts(accountId: string): Promise<ZernioInstagramPostsPage> {
+    const response = await this.request<{
+      posts?: Array<{
+        platform?: string;
+        platformPostId?: string;
+        platformPostUrl?: string;
+        content?: string;
+        publishedAt?: string;
+        mediaType?: string;
+        thumbnailUrl?: string;
+      }>;
+    }>('/posts/sync-external', {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
     });
-    if (options.after) params.set('after', options.after);
-    const response = await this.request<ZernioInstagramPostsPage>(
-      `/ads/instagram-posts?${params.toString()}`,
-    );
+
     return {
-      ...response,
-      posts: response.posts ?? [],
+      posts: (response.posts ?? [])
+        .filter((post) => post.platform === 'instagram' && Boolean(post.platformPostId))
+        .map((post) => ({
+          id: post.platformPostId as string,
+          caption: post.content,
+          mediaType: post.mediaType,
+          thumbnailUrl: post.thumbnailUrl,
+          permalink: post.platformPostUrl,
+          timestamp: post.publishedAt,
+        })),
     };
   }
 
