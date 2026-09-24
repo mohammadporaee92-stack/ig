@@ -78,37 +78,44 @@ describe('Zernio API client', () => {
     expect(health.tokenStatus?.valid).toBe(true);
   });
 
-  it('پست‌های اینستاگرام را برای Post Picker با cursor دریافت می‌کند', async () => {
-    const fetchMock = vi.fn(async (input: string) => {
-      expect(input).toBe('https://zernio.test/api/v1/ads/instagram-posts?accountId=acc_1&limit=30&after=cursor_1');
+  it('پست‌های ارگانیک Instagram را بدون Meta Ads برای Post Picker دریافت می‌کند', async () => {
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      expect(input).toBe('https://zernio.test/api/v1/posts/sync-external');
+      expect(init?.method).toBe('POST');
+      expect(JSON.parse(String(init?.body))).toEqual({ accountId: 'acc_1' });
       return new Response(JSON.stringify({
-        igUserId: '17841400000000000',
-        username: 'mohammad_por_ai',
+        synced: { postsFound: 2, postsSynced: 2, skipped: false },
         posts: [
           {
-            id: '18050809559368305',
-            caption: 'Launch day',
+            platform: 'instagram',
+            platformPostId: '18050809559368305',
+            platformPostUrl: 'https://www.instagram.com/reel/ABCdef/',
+            content: 'Launch day',
+            publishedAt: '2026-09-18T09:00:00Z',
             mediaType: 'VIDEO',
             thumbnailUrl: 'https://example.com/thumb.jpg',
-            permalink: 'https://www.instagram.com/reel/ABCdef/',
-            timestamp: '2026-09-18T09:00:00+0000',
+          },
+          {
+            platform: 'facebook',
+            platformPostId: 'ignored',
+            content: 'not instagram',
           },
         ],
-        paging: { after: 'cursor_2' },
       }), { status: 200 });
     });
 
-    const page = await new ZernioClient(fetchMock).listInstagramPosts('acc_1', {
-      limit: 30,
-      after: 'cursor_1',
-    });
+    const page = await new ZernioClient(fetchMock).listInstagramPosts('acc_1');
 
-    expect(page.posts).toHaveLength(1);
-    expect(page.posts[0]).toMatchObject({
-      id: '18050809559368305',
-      mediaType: 'VIDEO',
-    });
-    expect(page.paging?.after).toBe('cursor_2');
+    expect(page.posts).toEqual([
+      {
+        id: '18050809559368305',
+        caption: 'Launch day',
+        mediaType: 'VIDEO',
+        thumbnailUrl: 'https://example.com/thumb.jpg',
+        permalink: 'https://www.instagram.com/reel/ABCdef/',
+        timestamp: '2026-09-18T09:00:00Z',
+      },
+    ]);
   });
 
   it('خطای Zernio را بدون افشای کلید طبقه‌بندی می‌کند', async () => {
