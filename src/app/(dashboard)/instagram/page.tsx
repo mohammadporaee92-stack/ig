@@ -24,9 +24,35 @@ export default async function InstagramPage({
 }) {
   const user = await requireUser();
   const params = await searchParams;
-  const { repos } = await getContainer();
+  const { repos, zernioClient } = await getContainer();
   const accounts = await repos.accounts.listByUser(user.sub);
   const connected = accounts.filter((a) => a.status !== 'disconnected');
+  const zernioConfigured = env().zernioConfigured;
+  const importedZernioIds = connected
+    .filter((a) => a.provider === 'zernio' && a.provider_account_id)
+    .map((a) => a.provider_account_id as string);
+
+  let zernioAccounts: Array<{
+    id: string;
+    username: string;
+    displayName?: string;
+    profilePictureUrl?: string;
+    isActive: boolean;
+  }> = [];
+  let zernioLoadError = false;
+  if (zernioConfigured) {
+    try {
+      zernioAccounts = (await zernioClient.listInstagramAccounts()).map((account) => ({
+        id: account.id,
+        username: account.username,
+        displayName: account.displayName,
+        profilePictureUrl: account.profilePictureUrl,
+        isActive: account.isActive,
+      }));
+    } catch {
+      zernioLoadError = true;
+    }
+  }
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -55,7 +81,7 @@ export default async function InstagramPage({
         </Alert>
       ) : null}
 
-      {!env().instagramConfigured && !env().zernioConfigured ? (
+      {!env().instagramConfigured && !zernioConfigured ? (
         <Alert variant="warning">
           <strong>پیکربندی ناقص است.</strong>
           <p className="mt-1 leading-6">
@@ -68,6 +94,31 @@ export default async function InstagramPage({
             راهنمای کامل در <code className="rounded bg-amber-100 px-1">README.md</code> بخش «Instagram OAuth Setup».
           </p>
         </Alert>
+      ) : null}
+
+      {zernioConfigured ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>حساب‌های Instagram موجود در Zernio</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm leading-7 text-slate-500">
+              هر تعداد حساب Instagram که در Zernio متصل کرده‌اید می‌توانید جداگانه به IGFlow اضافه کنید.
+              اتوماسیون‌های هر حساب مستقل از حساب‌های دیگر باقی می‌مانند.
+            </p>
+            {zernioLoadError ? (
+              <Alert variant="warning">
+                دریافت فهرست حساب‌ها از Zernio ناموفق بود. اتصال Zernio/API Key را بررسی و صفحه را دوباره بارگذاری کنید.
+              </Alert>
+            ) : (
+              <ZernioImportAction
+                enabled
+                accounts={zernioAccounts}
+                importedProviderAccountIds={importedZernioIds}
+              />
+            )}
+          </CardContent>
+        </Card>
       ) : null}
 
       {connected.length === 0 ? (
@@ -83,7 +134,6 @@ export default async function InstagramPage({
                 کلید فقط روی سرور استفاده می‌شود و هرگز به مرورگر فرستاده نمی‌شود.
               </p>
             </div>
-            {env().zernioConfigured ? <ZernioImportAction enabled /> : null}
             {env().instagramConfigured ? (
               <div className="border-t border-slate-100 pt-4">
                 <Link href="/api/instagram/connect">
