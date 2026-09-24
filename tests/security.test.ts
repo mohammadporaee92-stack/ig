@@ -102,6 +102,10 @@ describe('Security', () => {
       expect(out).not.toContain('IGQVJWabcdefghijklmnopqrstuvwxyz123');
       expect(out).toContain('[REDACTED]');
     });
+    it('کلید API زرنيو داخل رشته هم redact می‌شود', () => {
+      const key = `sk_${'a'.repeat(64)}`;
+      expect(redact(`Authorization: Bearer ${key}`)).toBe('Authorization: Bearer [REDACTED]');
+    });
   });
 
   describe('SQL Injection', () => {

@@ -23,6 +23,7 @@ const SENSITIVE_KEYS = [
 
 const TOKEN_PATTERNS: RegExp[] = [
   /\b(IG|EAA)[A-Za-z0-9_\-]{20,}\b/g, // توکن‌های متا
+  /\bsk_[a-fA-F0-9]{64}\b/g, // کلیدهای API زرنيو
   /\bv1\.[A-Za-z0-9+/=]{10,}\.[A-Za-z0-9+/=]{10,}\.[A-Za-z0-9+/=]{10,}/g, // توکن رمزشدهٔ ما
 ];
 

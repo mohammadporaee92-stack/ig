@@ -4,6 +4,7 @@ import { createRepositories, type Repositories } from '~/infra/db/repositories';
 import { InstagramClient } from '~/infra/instagram/client';
 import { MessagingProfileFollowChecker } from '~/infra/instagram/messaging-profile-follow-checker';
 import { getQueue, type Queue } from '~/infra/queue/queue';
+import { ZernioClient } from '~/infra/zernio/client';
 import { AutomationEngine } from './automation-engine';
 import { MessageSender } from './message-sender';
 import { RateLimiter } from './rate-limiter';
@@ -14,6 +15,7 @@ export interface Container {
   db: Db;
   repos: Repositories;
   igClient: InstagramClient;
+  zernioClient: ZernioClient;
   tokens: TokenService;
   rateLimiter: RateLimiter;
   sender: MessageSender;
@@ -30,7 +32,12 @@ interface ContainerGlobal {
 }
 const g = globalThis as unknown as ContainerGlobal;
 
-export function buildContainer(db: Db, queue: Queue, igClient = new InstagramClient()): Container {
+export function buildContainer(
+  db: Db,
+  queue: Queue,
+  igClient = new InstagramClient(),
+  zernioClient = new ZernioClient(),
+): Container {
   const repos = createRepositories(db);
   const tokens = new TokenService(repos, igClient);
   const rateLimiter = new RateLimiter(db);
@@ -47,7 +54,7 @@ export function buildContainer(db: Db, queue: Queue, igClient = new InstagramCli
   const engine = new AutomationEngine({ repos, sender, followCheckers, queue });
   const processor = new WebhookProcessor({ repos, engine, queue });
 
-  return { db, repos, igClient, tokens, rateLimiter, sender, followCheckers, engine, processor, queue };
+  return { db, repos, igClient, zernioClient, tokens, rateLimiter, sender, followCheckers, engine, processor, queue };
 }
 
 export async function getContainer(): Promise<Container> {

@@ -38,6 +38,9 @@ const schema = z.object({
   ),
   IG_WEBHOOK_FIELDS: z.string().default('comments,messages,messaging_postbacks,messaging_optins'),
 
+  ZERNIO_API_KEY: z.string().default(''),
+  ZERNIO_BASE_URL: z.string().url().default('https://zernio.com/api/v1'),
+
   IG_WEBHOOK_VERIFY_TOKEN: z.string().default('dev-verify-token'),
   WEBHOOK_SIGNATURE_REQUIRED: z
     .string()
@@ -94,6 +97,7 @@ function load() {
     isProd: e.NODE_ENV === 'production',
     isTest: e.NODE_ENV === 'test',
     instagramConfigured: Boolean(e.IG_APP_ID && e.IG_APP_SECRET),
+    zernioConfigured: Boolean(e.ZERNIO_API_KEY),
     /**
      * حالت سرورلس (Vercel و مشابه آن).
      *

@@ -5,7 +5,15 @@ import { useRouter } from 'next/navigation';
 import { Button } from '~/components/ui';
 import { apiPost } from '~/lib/api-client';
 
-export function AccountActions({ accountId, webhookSubscribed }: { accountId: string; webhookSubscribed: boolean }) {
+export function AccountActions({
+  accountId,
+  webhookSubscribed,
+  provider = 'meta',
+}: {
+  accountId: string;
+  webhookSubscribed: boolean;
+  provider?: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -22,7 +30,7 @@ export function AccountActions({ accountId, webhookSubscribed }: { accountId: st
 
   return (
     <div className="flex flex-wrap gap-2">
-      {!webhookSubscribed ? (
+      {provider === 'meta' && !webhookSubscribed ? (
         <Button
           variant="outline"
           size="sm"
@@ -32,9 +40,11 @@ export function AccountActions({ accountId, webhookSubscribed }: { accountId: st
           {busy === 'sub' ? '…' : 'فعال‌سازی Webhook'}
         </Button>
       ) : null}
-      <a href="/api/instagram/connect?force=1">
-        <Button variant="outline" size="sm">اتصال مجدد</Button>
-      </a>
+      {provider === 'meta' ? (
+        <a href="/api/instagram/connect?force=1">
+          <Button variant="outline" size="sm">اتصال مجدد</Button>
+        </a>
+      ) : null}
       <Button
         variant="destructive"
         size="sm"
@@ -45,7 +55,7 @@ export function AccountActions({ accountId, webhookSubscribed }: { accountId: st
           }
         }}
       >
-        {busy === 'disc' ? '…' : 'قطع اتصال'}
+        {busy === 'disc' ? '…' : provider === 'zernio' ? 'حذف از IGFlow' : 'قطع اتصال'}
       </Button>
     </div>
   );

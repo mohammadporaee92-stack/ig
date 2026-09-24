@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { requireUser } from '~/server/auth';
 import { getContainer } from '~/server/container';
 import { getDashboardStats, getRecentRuns } from '~/server/queries';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState } from '~/components/ui';
+import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState } from '~/components/ui';
 import { formatNumber, percent, relativeTime } from '~/lib/utils';
 import { RunStatusBadge } from '~/components/run-status';
 
@@ -57,6 +57,7 @@ export default async function DashboardPage() {
 
   /* ── Onboarding: متصل شده اما هنوز اتوماسیونی ندارد ── */
   const noAutomations = stats.totalAutomations === 0;
+  const zernioPending = account.provider === 'zernio';
 
   return (
     <div className="space-y-6">
@@ -65,9 +66,11 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-bold text-slate-900">داشبورد</h1>
           <p className="mt-1 text-sm text-slate-500">نمای کلی عملکرد اتوماسیون‌ها</p>
         </div>
-        <Link href="/automations/new">
-          <Button>+ اتوماسیون جدید</Button>
-        </Link>
+        {zernioPending ? (
+          <Link href="/instagram"><Button variant="outline">وضعیت اتصال Zernio</Button></Link>
+        ) : (
+          <Link href="/automations/new"><Button>+ اتوماسیون جدید</Button></Link>
+        )}
       </div>
 
       {/* حساب متصل */}
@@ -90,7 +93,9 @@ export default async function DashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {account.webhook_subscribed ? (
+            {zernioPending ? (
+              <Badge variant="warning">Webhook: مرحلهٔ بعد</Badge>
+            ) : account.webhook_subscribed ? (
               <Badge variant="success">Webhook فعال</Badge>
             ) : (
               <Badge variant="warning">Webhook غیرفعال</Badge>
@@ -100,7 +105,13 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      {noAutomations ? (
+      {noAutomations && zernioPending ? (
+        <Alert variant="warning">
+          حساب Zernio با موفقیت شناسایی شده است. برای جلوگیری از ارسال ناقص یا تکراری، ساخت اتوماسیون تا تکمیل Webhook و آداپتور ارسال در مرحلهٔ بعد غیرفعال است.
+        </Alert>
+      ) : null}
+
+      {noAutomations && !zernioPending ? (
         <Card>
           <CardContent className="pt-6">
             <EmptyState
