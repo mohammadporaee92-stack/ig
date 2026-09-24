@@ -37,6 +37,24 @@ export interface ZernioAccountHealth {
   recommendations?: string[];
 }
 
+export interface ZernioInstagramPost {
+  id: string;
+  caption?: string;
+  mediaType?: string;
+  thumbnailUrl?: string;
+  permalink?: string;
+  timestamp?: string;
+}
+
+export interface ZernioInstagramPostsPage {
+  igUserId?: string;
+  username?: string;
+  posts: ZernioInstagramPost[];
+  paging?: {
+    after?: string;
+  };
+}
+
 export type ZernioMatchMode = 'contains' | 'word' | 'exact';
 
 export interface ZernioCommentAutomation {
@@ -181,6 +199,24 @@ export class ZernioClient {
 
   async getAccountHealth(accountId: string): Promise<ZernioAccountHealth> {
     return this.request<ZernioAccountHealth>(`/accounts/${encodeURIComponent(accountId)}/health`);
+  }
+
+  async listInstagramPosts(
+    accountId: string,
+    options: { limit?: number; after?: string } = {},
+  ): Promise<ZernioInstagramPostsPage> {
+    const params = new URLSearchParams({
+      accountId,
+      limit: String(Math.min(100, Math.max(1, options.limit ?? 25))),
+    });
+    if (options.after) params.set('after', options.after);
+    const response = await this.request<ZernioInstagramPostsPage>(
+      `/ads/instagram-posts?${params.toString()}`,
+    );
+    return {
+      ...response,
+      posts: response.posts ?? [],
+    };
   }
 
   async listCommentAutomations(profileId: string): Promise<ZernioCommentAutomation[]> {
