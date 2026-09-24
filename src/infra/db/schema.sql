@@ -48,6 +48,9 @@ CREATE TABLE IF NOT EXISTS instagram_accounts (
   scopes              TEXT NOT NULL DEFAULT '',
   webhook_subscribed  BOOLEAN NOT NULL DEFAULT FALSE,
   webhook_fields      TEXT NOT NULL DEFAULT '',
+  provider            TEXT NOT NULL DEFAULT 'meta',     -- meta | zernio
+  provider_account_id TEXT,                             -- Zernio account id (server-side only)
+  provider_profile_id TEXT,                             -- Zernio profile id
   last_error          TEXT,
   connected_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   disconnected_at     TIMESTAMPTZ,
@@ -57,6 +60,13 @@ CREATE TABLE IF NOT EXISTS instagram_accounts (
 );
 -- جست‌وجوی سریع هنگام دریافت webhook (که فقط ig_user_id دارد)
 CREATE INDEX IF NOT EXISTS idx_ig_accounts_igid ON instagram_accounts(ig_user_id);
+-- ستون‌های provider برای دیتابیس‌هایی که قبل از اتصال Zernio ساخته شده‌اند.
+ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'meta';
+ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS provider_account_id TEXT;
+ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS provider_profile_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ig_accounts_provider
+  ON instagram_accounts(user_id, provider, provider_account_id)
+  WHERE provider_account_id IS NOT NULL;
 
 -- ── 3. OAuth tokens (رمزنگاری‌شده at rest) ───────────────────────────
 CREATE TABLE IF NOT EXISTS oauth_tokens (

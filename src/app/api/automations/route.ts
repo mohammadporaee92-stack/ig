@@ -17,6 +17,9 @@ export const POST = withAuth(
     // حساب باید متعلق به همین tenant باشد
     const account = await container.repos.accounts.findById(user.sub, input.instagramAccountId);
     if (!account) return error('حساب اینستاگرام یافت نشد', 404);
+    if (account.provider === 'zernio') {
+      return error('ساخت اتوماسیون Zernio تا تکمیل Webhook و ارسال پیام در مرحلهٔ بعد غیرفعال است', 409);
+    }
 
     const sizeError = validateMessageSizes(input);
     if (sizeError) return error(sizeError, 422);

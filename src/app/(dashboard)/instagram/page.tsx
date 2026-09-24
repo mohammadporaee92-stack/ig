@@ -5,6 +5,7 @@ import { env } from '~/lib/env';
 import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle } from '~/components/ui';
 import { formatDateTime, formatNumber } from '~/lib/utils';
 import { AccountActions } from './account-actions';
+import { ZernioImportAction } from './zernio-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +33,7 @@ export default async function InstagramPage({
       <div>
         <h1 className="text-2xl font-bold text-slate-900">اتصال اینستاگرام</h1>
         <p className="mt-1 text-sm text-slate-500">
-          حساب Professional خود را از طریق فرآیند رسمی Login اینستاگرام متصل کنید
+          حساب Professional خود را مستقیم از Meta یا از طریق Zernio متصل کنید
         </p>
       </div>
 
@@ -54,11 +55,13 @@ export default async function InstagramPage({
         </Alert>
       ) : null}
 
-      {!env().instagramConfigured ? (
+      {!env().instagramConfigured && !env().zernioConfigured ? (
         <Alert variant="warning">
           <strong>پیکربندی ناقص است.</strong>
           <p className="mt-1 leading-6">
-            برای فعال‌شدن دکمهٔ اتصال، باید یک اپ در Meta App Dashboard بسازید و مقادیر{' '}
+            برای اتصال مستقیم باید Meta App را تنظیم کنید؛ یا کلید اختصاصی Zernio را با نام{' '}
+            <code className="rounded bg-amber-100 px-1">ZERNIO_API_KEY</code> در Environment Variables قرار دهید.
+            برای اتصال مستقیم Meta، مقادیر{' '}
             <code className="rounded bg-amber-100 px-1">IG_APP_ID</code> و{' '}
             <code className="rounded bg-amber-100 px-1">IG_APP_SECRET</code> را در فایل{' '}
             <code className="rounded bg-amber-100 px-1">.env.local</code> قرار دهید.
@@ -76,18 +79,18 @@ export default async function InstagramPage({
             <div>
               <h2 className="text-lg font-semibold text-slate-900">هنوز حسابی متصل نیست</h2>
               <p className="mx-auto mt-2 max-w-lg text-sm leading-7 text-slate-500">
-                با کلیک روی دکمهٔ زیر به صفحهٔ رسمی اینستاگرام منتقل می‌شوید، مجوزها را تأیید می‌کنید
-                و به همین‌جا برمی‌گردید. ما هرگز رمز عبور شما را نمی‌بینیم.
+                اگر حساب را قبلاً در Zernio متصل کرده‌اید، IGFlow آن را با API Key شناسایی می‌کند.
+                کلید فقط روی سرور استفاده می‌شود و هرگز به مرورگر فرستاده نمی‌شود.
               </p>
             </div>
-            <div className="mx-auto grid max-w-md gap-2 text-right text-sm text-slate-600">
-              <div className="rounded-lg bg-slate-50 px-3 py-2">✅ بدون نیاز به Facebook Page</div>
-              <div className="rounded-lg bg-slate-50 px-3 py-2">✅ بدون ورود به Meta Business Suite</div>
-              <div className="rounded-lg bg-slate-50 px-3 py-2">✅ بدون کپی دستی Access Token</div>
-            </div>
-            <Link href="/api/instagram/connect">
-              <Button size="lg" disabled={!env().instagramConfigured}>📸 اتصال اینستاگرام</Button>
-            </Link>
+            {env().zernioConfigured ? <ZernioImportAction enabled /> : null}
+            {env().instagramConfigured ? (
+              <div className="border-t border-slate-100 pt-4">
+                <Link href="/api/instagram/connect">
+                  <Button variant="outline">اتصال مستقیم از Meta</Button>
+                </Link>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : (
@@ -97,6 +100,7 @@ export default async function InstagramPage({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <CardTitle className="flex items-center gap-2">
                   <span dir="ltr">@{account.username}</span>
+                  <Badge>{account.provider === 'zernio' ? 'Zernio' : 'Meta'}</Badge>
                   {account.status === 'connected' ? (
                     <Badge variant="success">Connected ✅</Badge>
                   ) : account.status === 'needs_reauth' ? (
@@ -105,7 +109,11 @@ export default async function InstagramPage({
                     <Badge variant="danger">{account.status}</Badge>
                   )}
                 </CardTitle>
-                <AccountActions accountId={account.id} webhookSubscribed={account.webhook_subscribed} />
+                <AccountActions
+                  accountId={account.id}
+                  webhookSubscribed={account.webhook_subscribed}
+                  provider={account.provider}
+                />
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -133,19 +141,27 @@ export default async function InstagramPage({
               <div className="rounded-lg border border-slate-200 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold text-slate-800">وضعیت Webhook</h3>
-                  {account.webhook_subscribed ? (
+                  {account.provider === 'zernio' ? (
+                    <Badge variant="warning">مرحله بعد</Badge>
+                  ) : account.webhook_subscribed ? (
                     <Badge variant="success">فعال</Badge>
                   ) : (
                     <Badge variant="warning">غیرفعال</Badge>
                   )}
                 </div>
-                <p className="mt-2 text-xs leading-6 text-slate-500">
-                  فیلدهای مشترک‌شده:{' '}
-                  <code dir="ltr" className="rounded bg-slate-100 px-1">
-                    {account.webhook_fields || env().igWebhookFields.join(',')}
-                  </code>
-                </p>
-                {!account.webhook_subscribed ? (
+                {account.provider === 'zernio' ? (
+                  <p className="mt-2 text-xs leading-6 text-amber-700">
+                    حساب و سلامت اتصال تأیید شده است. دریافت رویداد و ارسال خودکار بعد از نصب آداپتور Zernio فعال می‌شود.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs leading-6 text-slate-500">
+                    فیلدهای مشترک‌شده:{' '}
+                    <code dir="ltr" className="rounded bg-slate-100 px-1">
+                      {account.webhook_fields || env().igWebhookFields.join(',')}
+                    </code>
+                  </p>
+                )}
+                {account.provider !== 'zernio' && !account.webhook_subscribed ? (
                   <p className="mt-2 text-xs leading-6 text-amber-700">
                     ⚠️ دریافت رویداد کامنت نیازمند <strong>Advanced Access</strong> و تأیید App Review است.
                     {account.last_error ? <> پیام خطا: <span dir="ltr">{account.last_error}</span></> : null}
@@ -154,11 +170,16 @@ export default async function InstagramPage({
               </div>
 
               <div className="rounded-lg bg-slate-50 p-4 text-xs leading-6 text-slate-600">
+                <strong className="text-slate-800">ارائه‌دهنده:</strong>{' '}
+                <span dir="ltr">{account.provider === 'zernio' ? 'Zernio API' : 'Meta API'}</span>
+                <br />
                 <strong className="text-slate-800">مجوزهای اعطاشده:</strong>{' '}
                 <span dir="ltr">{account.scopes || '—'}</span>
                 <br />
-                <strong className="text-slate-800">امنیت توکن:</strong> Access Token شما با AES-256-GCM رمزنگاری شده
-                و هرگز در پاسخ‌های API، لاگ‌ها یا مرورگر نمایش داده نمی‌شود.
+                <strong className="text-slate-800">امنیت:</strong>{' '}
+                {account.provider === 'zernio'
+                  ? 'API Key فقط در Secretهای سرور نگه‌داری می‌شود و در دیتابیس حساب ذخیره نمی‌شود.'
+                  : 'Access Token با AES-256-GCM رمزنگاری شده و هرگز نمایش داده نمی‌شود.'}
               </div>
             </CardContent>
           </Card>

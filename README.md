@@ -45,6 +45,7 @@ IGFlow یک SaaS چند-مستأجری (multi-tenant) است که با **Instagr
 | قابلیت | وضعیت | توضیح |
 |---|---|---|
 | اتصال با Instagram Login رسمی | ✅ | یک دکمه، OAuth استاندارد، بدون Facebook Page |
+| شناسایی حساب متصل در Zernio | ✅ مرحلهٔ ۱ | واردکردن حساب + health check؛ Webhook و ارسال در مرحلهٔ بعد |
 | تشخیص کلیدواژه | ✅ | چند کلیدواژه، حساس/غیرحساس به حروف، `exact` یا `contains` |
 | پاسخ عمومی به کامنت | ✅ | اختیاری، قابل تنظیم در هر اتوماسیون |
 | پاسخ خصوصی (Private Reply) | ✅ | یک بار به‌ازای هر کامنت، تا ۷ روز پس از کامنت |
@@ -58,7 +59,7 @@ IGFlow یک SaaS چند-مستأجری (multi-tenant) است که با **Instagr
 | چند-مستأجری | ✅ | هر کوئری با `user_id` محدود می‌شود |
 | رمزنگاری توکن‌ها | ✅ | AES-256-GCM، هرگز در پاسخ API یا لاگ ظاهر نمی‌شود |
 | داشبورد و تحلیل‌ها | ✅ | ۱۱ صفحه، Wizard هفت‌مرحله‌ای، پیش‌نمایش بصری جریان |
-| تست خودکار | ✅ | **۱۱۸ تست** — OAuth، Webhook، کلیدواژه، اتوماسیون، امنیت، انطباق |
+| تست خودکار | ✅ | **۱۳۲ تست** — OAuth، Webhook، Zernio، کلیدواژه، اتوماسیون، امنیت، انطباق |
 
 ---
 
@@ -289,6 +290,22 @@ npm run worker
 | `IG_REDIRECT_URI` | باید **دقیقاً** با مقدار ثبت‌شده در داشبورد Meta یکی باشد |
 | `IG_SCOPES` | پیش‌فرض: `instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments` |
 | `IG_GRAPH_VERSION` | پیش‌فرض `v25.0` |
+
+### Zernio — اتصال مرحلهٔ اول
+
+| متغیر | توضیح |
+|---|---|
+| `ZERNIO_API_KEY` | کلید اختصاصی IGFlow؛ فقط در Secretهای سرور ذخیره شود |
+| `ZERNIO_BASE_URL` | پیش‌فرض `https://zernio.com/api/v1` |
+
+راه‌اندازی روی Vercel:
+
+1. در Zernio یک API Key با دسترسی حساب Instagram موردنظر بسازید.
+2. در Vercel → Settings → Environment Variables مقدار `ZERNIO_API_KEY` را برای Production و Preview اضافه و Sensitive کنید.
+3. پروژه را Redeploy کنید، وارد IGFlow شوید و در صفحهٔ `/instagram` دکمهٔ «اتصال حساب موجود در Zernio» را بزنید.
+4. IGFlow حساب را از `GET /accounts` پیدا می‌کند، با endpoint سلامت بررسی می‌کند و فقط شناسه‌های غیرمحرمانه را در دیتابیس ذخیره می‌کند.
+
+> در این مرحله Webhook و ارسال خودکار Zernio عمداً غیرفعال است. تا تکمیل آداپتور مرحلهٔ بعد، API نیز اجازهٔ ساخت اتوماسیون برای حساب Zernio را نمی‌دهد؛ بنابراین اتصال ناقص باعث ارسال تکراری یا بی‌اثر نمی‌شود.
 
 ### Webhook
 

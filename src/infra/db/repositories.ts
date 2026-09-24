@@ -72,6 +72,9 @@ export interface InstagramAccountRow {
   scopes: string;
   webhook_subscribed: boolean;
   webhook_fields: string;
+  provider: string;
+  provider_account_id: string | null;
+  provider_profile_id: string | null;
   last_error: string | null;
   connected_at: Date;
   disconnected_at: Date | null;
@@ -130,6 +133,85 @@ export class InstagramAccountRepo {
     const res = await this.db.query<InstagramAccountRow>(
       `SELECT * FROM instagram_accounts WHERE user_id = $1 ORDER BY connected_at DESC`,
       [userId],
+    );
+    return res.rows;
+  }
+
+  /**
+   * ثبت حسابی که OAuth آن را Zernio مدیریت می‌کند.
+   * API key تیمی در دیتابیس ذخیره نمی‌شود؛ فقط شناسه‌های غیرمحرمانه نگه‌داری می‌شوند.
+   */
+  async upsertZernio(data: {
+    userId: string;
+    providerAccountId: string;
+    providerProfileId: string;
+    username: string;
+    displayName?: string | null;
+    profilePictureUrl?: string | null;
+    active: boolean;
+  }): Promise<InstagramAccountRow> {
+    const existing = await this.db.query<InstagramAccountRow>(
+      `SELECT * FROM instagram_accounts
+       WHERE user_id = $1 AND provider = 'zernio' AND provider_account_id = $2`,
+      [data.userId, data.providerAccountId],
+    );
+
+    if (existing.rows[0]) {
+      const updated = await this.db.query<InstagramAccountRow>(
+        `UPDATE instagram_accounts SET
+           username = $3,
+           name = $4,
+           profile_picture_url = $5,
+           provider_profile_id = $6,
+           status = $7,
+           disconnected_at = CASE WHEN $7 = 'disconnected' THEN now() ELSE NULL END,
+           last_error = NULL,
+           updated_at = now()
+         WHERE user_id = $1 AND provider = 'zernio' AND provider_account_id = $2
+         RETURNING *`,
+        [
+          data.userId,
+          data.providerAccountId,
+          data.username,
+          data.displayName ?? null,
+          data.profilePictureUrl ?? null,
+          data.providerProfileId,
+          data.active ? 'connected' : 'disconnected',
+        ],
+      );
+      return updated.rows[0] as InstagramAccountRow;
+    }
+
+    const id = newId('iga');
+    const inserted = await this.db.query<InstagramAccountRow>(
+      `INSERT INTO instagram_accounts
+         (id, user_id, ig_user_id, username, name, account_type, profile_picture_url,
+          followers_count, media_count, scopes, status, provider, provider_account_id,
+          provider_profile_id, webhook_subscribed, webhook_fields, connected_at, disconnected_at,
+          last_error, updated_at)
+       VALUES ($1,$2,$3,$4,$5,'BUSINESS',$6,0,0,'zernio',$7,'zernio',$8,$9,FALSE,'',now(),$10,NULL,now())
+       RETURNING *`,
+      [
+        id,
+        data.userId,
+        `zernio:${data.providerAccountId}`,
+        data.username,
+        data.displayName ?? null,
+        data.profilePictureUrl ?? null,
+        data.active ? 'connected' : 'disconnected',
+        data.providerAccountId,
+        data.providerProfileId,
+        data.active ? null : now(),
+      ],
+    );
+    return inserted.rows[0] as InstagramAccountRow;
+  }
+
+  async findByProviderAccountId(provider: string, providerAccountId: string): Promise<InstagramAccountRow[]> {
+    const res = await this.db.query<InstagramAccountRow>(
+      `SELECT * FROM instagram_accounts
+       WHERE provider = $1 AND provider_account_id = $2 AND status = 'connected'`,
+      [provider, providerAccountId],
     );
     return res.rows;
   }
