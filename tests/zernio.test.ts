@@ -203,6 +203,31 @@ describe('Zernio account persistence', () => {
     expect(JSON.stringify(second)).not.toContain('sk_test_key_never_log_this');
   });
 
+  it('چند حساب Zernio را مستقل برای یک کاربر نگه می‌دارد', async () => {
+    const repos = createRepositories(world.db);
+    const first = await repos.accounts.upsertZernio({
+      userId: world.userId,
+      providerAccountId: 'z_multi_1',
+      providerProfileId: 'z_profile_multi_1',
+      username: 'mohammad_por_ai',
+      active: true,
+    });
+    const second = await repos.accounts.upsertZernio({
+      userId: world.userId,
+      providerAccountId: 'z_multi_2',
+      providerProfileId: 'z_profile_multi_2',
+      username: 'second_ai_page',
+      active: true,
+    });
+
+    expect(second.id).not.toBe(first.id);
+    const accounts = await repos.accounts.listByUser(world.userId);
+    expect(accounts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider_account_id: 'z_multi_1', provider: 'zernio' }),
+      expect.objectContaining({ provider_account_id: 'z_multi_2', provider: 'zernio' }),
+    ]));
+  });
+
   it('اتوماسیون فعال را فقط یک‌بار در Zernio می‌سازد و remote id را نگه می‌دارد', async () => {
     const repos = createRepositories(world.db);
     const account = await repos.accounts.upsertZernio({
