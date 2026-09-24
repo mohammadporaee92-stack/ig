@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { createWorld, type TestWorld } from './helpers';
-import { automationInputSchema, validateMessageSizes } from '~/server/automation-input';
+import { automationInputSchema, validateMessageSizes, validateProviderRequirements } from '~/server/automation-input';
 import { getDashboardStats, getAnalytics, listAutomationSummaries, getRecentRuns } from '~/server/queries';
 import { newId } from '~/lib/crypto';
 
@@ -133,21 +133,23 @@ describe('اعتبارسنجی ورودی اتوماسیون', () => {
     })).toThrow(/Media ID/);
   });
 
-  it('اتوماسیون فعال بدون Private Reply یا دکمهٔ ادامه رد می‌شود', () => {
+  it('اتوماسیون فعال بدون Private Reply رد و Quick Reply فقط برای Meta الزامی است', () => {
     expect(() => automationInputSchema.parse({
       ...base,
       status: 'active',
       privateReplyEnabled: false,
     })).toThrow(/Private Reply/);
 
-    expect(() => automationInputSchema.parse({
+    const withoutQuickReply = automationInputSchema.parse({
       ...base,
       status: 'active',
       messages: {
         ...base.messages,
         privateReply: { body: 'سلام', quickReplies: [] },
       },
-    })).toThrow(/Quick Reply/);
+    });
+    expect(validateProviderRequirements(withoutQuickReply, 'meta')).toMatch(/Quick Reply/);
+    expect(validateProviderRequirements(withoutQuickReply, 'zernio')).toBeNull();
   });
 
   it('اتوماسیون فعال با Follow Gate خالی رد می‌شود', () => {

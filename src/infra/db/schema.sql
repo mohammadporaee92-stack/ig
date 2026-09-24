@@ -117,6 +117,11 @@ CREATE TABLE IF NOT EXISTS automations (
   bot_disclosure_text   TEXT NOT NULL DEFAULT 'این یک پاسخ خودکار است 🤖',
   -- لینکی که با متغیر {{link}} در پیام‌ها جایگزین می‌شود (مثلاً لینک فایل/دوره)
   link_url              TEXT NOT NULL DEFAULT '',
+  -- شناسه و وضعیت همگام‌سازی با provider واسط (فعلاً Zernio)
+  provider_automation_id TEXT,
+  provider_sync_status   TEXT NOT NULL DEFAULT 'local', -- local | synced | error
+  provider_last_error    TEXT,
+  provider_synced_at     TIMESTAMPTZ,
   total_runs            INTEGER NOT NULL DEFAULT 0,
   last_run_at           TIMESTAMPTZ,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -124,6 +129,14 @@ CREATE TABLE IF NOT EXISTS automations (
 );
 CREATE INDEX IF NOT EXISTS idx_automations_user      ON automations(user_id);
 CREATE INDEX IF NOT EXISTS idx_automations_acct_stat ON automations(instagram_account_id, status);
+-- migration امن برای دیتابیس‌های موجود
+ALTER TABLE automations ADD COLUMN IF NOT EXISTS provider_automation_id TEXT;
+ALTER TABLE automations ADD COLUMN IF NOT EXISTS provider_sync_status TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE automations ADD COLUMN IF NOT EXISTS provider_last_error TEXT;
+ALTER TABLE automations ADD COLUMN IF NOT EXISTS provider_synced_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_automations_provider_id
+  ON automations(provider_automation_id)
+  WHERE provider_automation_id IS NOT NULL;
 
 -- ── 5. Keywords ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS automation_keywords (

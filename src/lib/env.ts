@@ -40,6 +40,7 @@ const schema = z.object({
 
   ZERNIO_API_KEY: z.string().default(''),
   ZERNIO_BASE_URL: z.string().url().default('https://zernio.com/api/v1'),
+  ZERNIO_WEBHOOK_SECRET: z.string().default(''),
 
   IG_WEBHOOK_VERIFY_TOKEN: z.string().default('dev-verify-token'),
   WEBHOOK_SIGNATURE_REQUIRED: z

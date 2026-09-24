@@ -37,6 +37,41 @@ export interface ZernioAccountHealth {
   recommendations?: string[];
 }
 
+export type ZernioMatchMode = 'contains' | 'word' | 'exact';
+
+export interface ZernioCommentAutomation {
+  id: string;
+  name: string;
+  profileId: string;
+  accountId: string;
+  isActive: boolean;
+}
+
+export interface ZernioCommentAutomationInput {
+  profileId: string;
+  accountId: string;
+  name: string;
+  dmMessage: string;
+  keywords: string[];
+  matchMode: ZernioMatchMode;
+  excludeKeywords?: string[];
+  platformPostId?: string;
+  commentReply?: string;
+  audience?: {
+    followerStatus: 'any' | 'follower' | 'non_follower';
+    whenUnknown: 'send' | 'verify' | 'skip';
+  };
+  followGate?: {
+    message: string;
+    buttonLabel: string;
+    notFollowingMessage: string;
+  };
+}
+
+export type ZernioCommentAutomationPatch = Partial<
+  Omit<ZernioCommentAutomationInput, 'profileId' | 'accountId'>
+> & { isActive?: boolean };
+
 export class ZernioApiError extends Error {
   constructor(
     message: string,
@@ -88,6 +123,7 @@ export class ZernioClient {
       const headers = new Headers(init.headers);
       headers.set('accept', 'application/json');
       headers.set('authorization', `Bearer ${e.ZERNIO_API_KEY}`);
+      if (init.body) headers.set('content-type', 'application/json');
       response = await this.fetchImpl(`${e.ZERNIO_BASE_URL.replace(/\/$/, '')}${path}`, {
         ...init,
         signal: controller.signal,
@@ -146,4 +182,55 @@ export class ZernioClient {
   async getAccountHealth(accountId: string): Promise<ZernioAccountHealth> {
     return this.request<ZernioAccountHealth>(`/accounts/${encodeURIComponent(accountId)}/health`);
   }
+
+  async listCommentAutomations(profileId: string): Promise<ZernioCommentAutomation[]> {
+    const response = await this.request<{ automations?: Array<Record<string, unknown>> }>(
+      `/comment-automations?profileId=${encodeURIComponent(profileId)}`,
+    );
+    return (response.automations ?? []).map(normalizeAutomation).filter((item): item is ZernioCommentAutomation => Boolean(item));
+  }
+
+  async createCommentAutomation(input: ZernioCommentAutomationInput): Promise<ZernioCommentAutomation> {
+    const response = await this.request<Record<string, unknown>>('/comment-automations', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    const automation = normalizeAutomation(unwrapAutomation(response));
+    if (!automation) throw new ZernioApiError('پاسخ ساخت اتوماسیون Zernio معتبر نیست', 502, 'invalid_response');
+    return automation;
+  }
+
+  async updateCommentAutomation(
+    id: string,
+    patch: ZernioCommentAutomationPatch,
+  ): Promise<ZernioCommentAutomation | null> {
+    const response = await this.request<Record<string, unknown>>(`/comment-automations/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+    return normalizeAutomation(unwrapAutomation(response));
+  }
+
+  async deleteCommentAutomation(id: string): Promise<void> {
+    await this.request<Record<string, unknown>>(`/comment-automations/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+}
+
+function unwrapAutomation(response: Record<string, unknown>): Record<string, unknown> {
+  const nested = response.automation;
+  return nested && typeof nested === 'object' ? nested as Record<string, unknown> : response;
+}
+
+function normalizeAutomation(value: Record<string, unknown>): ZernioCommentAutomation | null {
+  const id = String(value.id ?? value._id ?? '');
+  if (!id) return null;
+  return {
+    id,
+    name: String(value.name ?? ''),
+    profileId: String(value.profileId ?? ''),
+    accountId: String(value.accountId ?? ''),
+    isActive: value.isActive !== false,
+  };
 }

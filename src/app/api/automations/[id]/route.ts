@@ -1,7 +1,20 @@
 import { z } from 'zod';
 import { error, json, withAuth } from '../../_lib/handler';
-import { automationInputSchema, saveKeywordsAndTemplates, validateMessageSizes } from '~/server/automation-input';
+import {
+  automationInputSchema,
+  saveKeywordsAndTemplates,
+  validateMessageSizes,
+  validateProviderRequirements,
+} from '~/server/automation-input';
 import { newId } from '~/lib/crypto';
+import { ZernioApiError, type ZernioClient } from '~/infra/zernio/client';
+import type { InstagramAccountRow, Repositories } from '~/infra/db/repositories';
+import type { AutomationInput } from '~/server/automation-input';
+import {
+  readAutomationInput,
+  ZernioAutomationService,
+  ZernioAutomationValidationError,
+} from '~/server/zernio-automation-service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,9 +56,14 @@ export const PUT = withAuth(
     const input = automationInputSchema.parse(await request.json());
     const account = await container.repos.accounts.findById(user.sub, input.instagramAccountId);
     if (!account) return error('حساب اینستاگرام یافت نشد', 404);
+    if (input.instagramAccountId !== existing.instagram_account_id) {
+      return error('تغییر حساب یک اتوماسیون مجاز نیست؛ اتوماسیون جدید بسازید', 409);
+    }
 
     const sizeError = validateMessageSizes(input);
     if (sizeError) return error(sizeError, 422);
+    const providerError = validateProviderRequirements(input, account.provider);
+    if (providerError) return error(providerError, 422);
 
     await container.repos.automations.update(user.sub, id, {
       name: input.name,
@@ -66,6 +84,10 @@ export const PUT = withAuth(
       link_url: input.linkUrl,
     });
     await saveKeywordsAndTemplates(container.repos, user.sub, id, input);
+    if (account.provider === 'zernio') {
+      const syncError = await syncZernio(container.repos, container.zernioClient, user.sub, id, account, input);
+      if (syncError) return syncError;
+    }
     await container.repos.audit.log({ userId: user.sub, action: 'automation.update', entityType: 'automation', entityId: id });
     return json({ ok: true });
   },
@@ -83,9 +105,19 @@ export const PATCH = withAuth(
     const { action } = patchSchema.parse(await request.json());
 
     if (action === 'enable' || action === 'disable') {
-      await container.repos.automations.update(user.sub, id, { status: action === 'enable' ? 'active' : 'disabled' });
+      const status = action === 'enable' ? 'active' : 'disabled';
+      const account = await container.repos.accounts.findById(user.sub, existing.instagram_account_id);
+      if (!account) return error('حساب اینستاگرام یافت نشد', 404);
+      if (account.provider === 'zernio') {
+        const input = await readAutomationInput(container.repos, user.sub, id, status);
+        const providerError = validateProviderRequirements(input, account.provider);
+        if (providerError) return error(providerError, 422);
+        const syncError = await syncZernio(container.repos, container.zernioClient, user.sub, id, account, input);
+        if (syncError) return syncError;
+      }
+      await container.repos.automations.update(user.sub, id, { status });
       await container.repos.audit.log({ userId: user.sub, action: `automation.${action}`, entityType: 'automation', entityId: id });
-      return json({ ok: true, status: action === 'enable' ? 'active' : 'disabled' });
+      return json({ ok: true, status });
     }
 
     // duplicate
@@ -116,6 +148,17 @@ export const PATCH = withAuth(
 export const DELETE = withAuth(
   async ({ user, container, request }) => {
     const id = idFrom(request);
+    const existing = await container.repos.automations.findById(user.sub, id);
+    if (!existing) return error('اتوماسیون یافت نشد', 404);
+    const account = await container.repos.accounts.findById(user.sub, existing.instagram_account_id);
+    if (account?.provider === 'zernio') {
+      try {
+        await new ZernioAutomationService(container.repos, container.zernioClient).remove(user.sub, id);
+      } catch (err) {
+        if (err instanceof ZernioApiError) return error(`حذف اتوماسیون از Zernio ناموفق بود: ${err.message}`, err.status || 502, { code: err.code });
+        throw err;
+      }
+    }
     const deleted = await container.repos.automations.delete(user.sub, id);
     if (!deleted) return error('اتوماسیون یافت نشد', 404);
     await container.repos.audit.log({ userId: user.sub, action: 'automation.delete', entityType: 'automation', entityId: id });
@@ -123,3 +166,21 @@ export const DELETE = withAuth(
   },
   { mutation: true },
 );
+
+async function syncZernio(
+  repos: Repositories,
+  client: ZernioClient,
+  userId: string,
+  id: string,
+  account: InstagramAccountRow,
+  input: AutomationInput,
+): Promise<Response | null> {
+  try {
+    await new ZernioAutomationService(repos, client).sync(userId, id, account, input);
+    return null;
+  } catch (err) {
+    if (err instanceof ZernioAutomationValidationError) return error(err.message, err.status);
+    if (err instanceof ZernioApiError) return error(`همگام‌سازی Zernio ناموفق بود: ${err.message}`, err.status || 502, { code: err.code });
+    throw err;
+  }
+}

@@ -142,7 +142,7 @@ export default async function InstagramPage({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold text-slate-800">وضعیت Webhook</h3>
                   {account.provider === 'zernio' ? (
-                    <Badge variant="warning">مرحله بعد</Badge>
+                    account.webhook_subscribed ? <Badge variant="success">فعال</Badge> : <Badge variant="info">اختیاری</Badge>
                   ) : account.webhook_subscribed ? (
                     <Badge variant="success">فعال</Badge>
                   ) : (
@@ -150,8 +150,8 @@ export default async function InstagramPage({
                   )}
                 </div>
                 {account.provider === 'zernio' ? (
-                  <p className="mt-2 text-xs leading-6 text-amber-700">
-                    حساب و سلامت اتصال تأیید شده است. دریافت رویداد و ارسال خودکار بعد از نصب آداپتور Zernio فعال می‌شود.
+                  <p className="mt-2 text-xs leading-6 text-slate-600">
+                    ارسال خودکار با Comment Automation خود Zernio انجام می‌شود. Webhook امضاشده فقط برای لاگ و پایش است.
                   </p>
                 ) : (
                   <p className="mt-2 text-xs leading-6 text-slate-500">

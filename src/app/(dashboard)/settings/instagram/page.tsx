@@ -40,8 +40,10 @@ export default async function InstagramSettingsPage() {
             </div>
             <Kv k="Base URL" v={e.ZERNIO_BASE_URL} />
             <Kv k="API Key" v={e.zernioConfigured ? '•••••••••••••••• (فقط روی سرور)' : '— تنظیم نشده —'} />
+            <Kv k="Webhook Callback URL" v={`${e.APP_URL}/api/webhooks/zernio`} />
+            <Kv k="Webhook Secret" v={e.ZERNIO_WEBHOOK_SECRET ? '•••••••••••••••• (فقط روی سرور)' : '— تنظیم نشده —'} />
             <p className="mt-3 text-xs leading-6 text-slate-500">
-              در این مرحله فقط شناسایی حساب و بررسی سلامت اتصال فعال است؛ Webhook و ارسال خودکار در مرحلهٔ بعد افزوده می‌شود.
+              اتوماسیون‌های فعال با Comment Automation زرنیو همگام می‌شوند؛ Webhook امضاشده فقط رویدادها را برای پایش ثبت می‌کند.
             </p>
           </div>
 
@@ -87,7 +89,8 @@ export default async function InstagramSettingsPage() {
                   <Kv k="Zernio Account ID" v={account.provider_account_id ?? '—'} />
                   <Kv k="Zernio Profile ID" v={account.provider_profile_id ?? '—'} />
                   <Kv k="Credential" v="🔒 API Key فقط در Secretهای سرور نگه‌داری می‌شود" />
-                  <Kv k="Webhook و ارسال" v="مرحلهٔ بعد — هنوز فعال نیست" />
+                  <Kv k="Comment Automation" v="فعال — همگام‌شونده با Zernio" />
+                  <Kv k="Webhook" v={account.webhook_subscribed ? 'فعال (رویداد امضاشده دریافت شده)' : 'هنوز رویدادی دریافت نشده'} />
                 </>
               ) : (
                 <>
