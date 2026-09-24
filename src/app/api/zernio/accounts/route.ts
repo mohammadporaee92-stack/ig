@@ -7,6 +7,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const importSchema = z.object({
+  accountId: z.string().min(1).optional(),
   username: z.string().min(1).optional(),
 });
 
@@ -35,19 +36,22 @@ export const GET = withAuth(async ({ container }) => {
 export const POST = withAuth(
   async ({ user, container, request }) => {
     if (!env().zernioConfigured) return error('ZERNIO_API_KEY تنظیم نشده است', 503);
-    const { username } = await readJson(request, importSchema);
+    const { accountId, username } = await readJson(request, importSchema);
 
     try {
       const available = await container.zernioClient.listInstagramAccounts();
       const candidates = available.filter(
-        (account) => account.isActive && (!username || account.username.toLowerCase() === username.toLowerCase()),
+        (account) =>
+          account.isActive &&
+          (!accountId || account.id === accountId) &&
+          (!username || account.username.toLowerCase() === username.toLowerCase()),
       );
 
       if (!candidates.length) {
         return error('هیچ حساب Instagram فعال و قابل‌دسترسی در Zernio پیدا نشد', 404);
       }
-      if (candidates.length > 1 && !username) {
-        return error('بیش از یک حساب Instagram پیدا شد؛ username حساب موردنظر را مشخص کنید', 409, {
+      if (candidates.length > 1 && !accountId && !username) {
+        return error('بیش از یک حساب Instagram پیدا شد؛ حساب موردنظر را مشخص کنید', 409, {
           accounts: candidates.map((account) => ({ username: account.username, id: account.id })),
         });
       }
