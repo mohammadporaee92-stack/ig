@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { requireUser } from '~/server/auth';
 import { getContainer } from '~/server/container';
 import { listAutomationSummaries } from '~/server/queries';
-import { Alert, Button, Card, CardContent, EmptyState } from '~/components/ui';
+import { Button, Card, CardContent, EmptyState } from '~/components/ui';
 import { AutomationCard } from './automation-card';
 
 export const dynamic = 'force-dynamic';
@@ -14,8 +14,7 @@ export default async function AutomationsPage() {
     listAutomationSummaries(repos, user.sub),
     repos.accounts.listByUser(user.sub),
   ]);
-  const account = accounts.find((item) => item.status === 'connected');
-  const automationReady = accounts.some((item) => item.status === 'connected' && item.provider !== 'zernio');
+  const automationReady = accounts.some((item) => item.status === 'connected');
 
   return (
     <div className="space-y-6">
@@ -30,12 +29,6 @@ export default async function AutomationsPage() {
           <Link href="/instagram"><Button variant="outline">ابتدا اینستاگرام را متصل کنید</Button></Link>
         )}
       </div>
-
-      {account?.provider === 'zernio' && !automationReady ? (
-        <Alert variant="warning">
-          حساب Zernio متصل است. ایجاد اتوماسیون پس از تکمیل آداپتور Webhook و ارسال Zernio در مرحلهٔ بعد فعال می‌شود.
-        </Alert>
-      ) : null}
 
       {items.length === 0 ? (
         <Card>

@@ -77,12 +77,6 @@ export const automationInputSchema = z.object({
     if (!input.messages.privateReply.body.trim()) {
       issue(['messages', 'privateReply', 'body'], 'متن Private Reply نمی‌تواند خالی باشد');
     }
-    if (mainHasContent && input.messages.privateReply.quickReplies.length === 0) {
-      issue(
-        ['messages', 'privateReply', 'quickReplies'],
-        'حداقل یک Quick Reply برای بازشدن پنجرهٔ ادامهٔ گفتگو لازم است',
-      );
-    }
   }
   if (input.followGateEnabled && !input.messages.followGate.body.trim()) {
     issue(['messages', 'followGate', 'body'], 'متن Follow Gate نمی‌تواند خالی باشد');
@@ -90,6 +84,19 @@ export const automationInputSchema = z.object({
 });
 
 export type AutomationInput = z.infer<typeof automationInputSchema>;
+
+/** قواعدی که فقط به اجرای مستقیم Meta مربوط‌اند، نه اتوماسیون native زرنيو. */
+export function validateProviderRequirements(input: AutomationInput, provider: string): string | null {
+  if (
+    provider !== 'zernio' &&
+    input.status === 'active' &&
+    input.privateReplyEnabled &&
+    input.messages.privateReply.quickReplies.length === 0
+  ) {
+    return 'حداقل یک Quick Reply برای بازشدن پنجرهٔ ادامهٔ گفتگو لازم است';
+  }
+  return null;
+}
 
 /** بررسی محدودیت ۱۰۰۰ بایتی متن پیام‌های دایرکت */
 export function validateMessageSizes(input: AutomationInput): string | null {

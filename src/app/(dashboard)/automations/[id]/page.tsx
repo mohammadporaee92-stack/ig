@@ -4,7 +4,7 @@ import { requireUser } from '~/server/auth';
 import { getContainer } from '~/server/container';
 import { AutomationWizard } from '~/components/automation/wizard';
 import { defaultDraft, emptyMessage, type AutomationDraft, type MessageDraft } from '~/components/automation/types';
-import { Badge, Button } from '~/components/ui';
+import { Alert, Badge, Button } from '~/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +78,8 @@ export default async function EditAutomationPage({ params }: { params: Promise<{
             {automation.status === 'active' ? <Badge variant="success">فعال</Badge> : null}
             {automation.status === 'draft' ? <Badge variant="muted">پیش‌نویس</Badge> : null}
             {automation.status === 'disabled' ? <Badge variant="warning">غیرفعال</Badge> : null}
+            {automation.provider_sync_status === 'synced' ? <Badge variant="success">Zernio Sync ✓</Badge> : null}
+            {automation.provider_sync_status === 'error' ? <Badge variant="danger">Zernio Sync Error</Badge> : null}
           </div>
           <p className="mt-1 text-sm text-slate-500">ویرایش اتوماسیون · {automation.total_runs} اجرا</p>
         </div>
@@ -87,10 +89,16 @@ export default async function EditAutomationPage({ params }: { params: Promise<{
         </div>
       </div>
 
+      {automation.provider_sync_status === 'error' && automation.provider_last_error ? (
+        <Alert variant="danger">
+          آخرین همگام‌سازی Zernio ناموفق بود: <span dir="ltr">{automation.provider_last_error}</span>
+        </Alert>
+      ) : null}
+
       <AutomationWizard
         automationId={id}
         initial={draft}
-        accounts={accounts.filter((a) => a.status !== 'disconnected').map((a) => ({ id: a.id, username: a.username }))}
+        accounts={accounts.filter((a) => a.status !== 'disconnected').map((a) => ({ id: a.id, username: a.username, provider: a.provider }))}
       />
     </div>
   );

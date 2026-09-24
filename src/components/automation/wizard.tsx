@@ -13,14 +13,14 @@ import { MessageEditor } from './message-editor';
 import { FlowPreview } from './flow-preview';
 import { WIZARD_STEPS, defaultDraft, type AutomationDraft } from './types';
 
-export interface AccountOption { id: string; username: string }
+export interface AccountOption { id: string; username: string; provider?: string }
 
 function byteLength(s: string): number {
   return new TextEncoder().encode(s).length;
 }
 
 /** اعتبارسنجی هر مرحله — همان قواعدی که سرور هم اعمال می‌کند */
-function validateStep(step: number, d: AutomationDraft): string[] {
+function validateStep(step: number, d: AutomationDraft, provider = 'meta'): string[] {
   const errs: string[] = [];
   if (step === 1) {
     if (!d.name.trim()) errs.push('نام اتوماسیون الزامی است');
@@ -34,7 +34,7 @@ function validateStep(step: number, d: AutomationDraft): string[] {
     if (d.privateReplyEnabled) {
       if (!d.messages.privateReply.body.trim()) errs.push('متن پیام خصوصی خالی است');
       if (byteLength(d.messages.privateReply.body) > 1000) errs.push('پیام خصوصی بیش از ۱۰۰۰ بایت است');
-      if (d.messages.privateReply.quickReplies.filter((q) => q.title.trim()).length === 0) {
+      if (provider !== 'zernio' && d.messages.privateReply.quickReplies.filter((q) => q.title.trim()).length === 0) {
         errs.push('حداقل یک دکمهٔ سریع لازم است تا کاربر بتواند پاسخ دهد و «رضایت» ثبت شود');
       }
     }
@@ -43,6 +43,12 @@ function validateStep(step: number, d: AutomationDraft): string[] {
     }
     if (byteLength(d.messages.main.body) > 1000) errs.push('پیام اصلی بیش از ۱۰۰۰ بایت است');
     if (d.followGateEnabled && !d.messages.followGate.body.trim()) errs.push('متن پیام Follow Gate خالی است');
+    if (provider === 'zernio' && Object.values(d.messages).some((message) => message.attachments.length > 0)) {
+      errs.push('در Zernio فایل را به‌صورت لینک در متن پیام قرار دهید');
+    }
+  }
+  if (step === 2 && provider === 'zernio' && d.targetScope === 'specific_posts' && d.targetMediaIds.length > 1) {
+    errs.push('هر اتوماسیون Zernio فقط می‌تواند یک پست مشخص داشته باشد');
   }
   return errs;
 }
@@ -66,14 +72,15 @@ export function AutomationWizard({
   const [negativeInput, setNegativeInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const selectedProvider = accounts.find((account) => account.id === draft.instagramAccountId)?.provider ?? 'meta';
 
   const set = <K extends keyof AutomationDraft>(key: K, value: AutomationDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
   const setMsg = (key: keyof AutomationDraft['messages'], value: AutomationDraft['messages'][typeof key]) =>
     setDraft((d) => ({ ...d, messages: { ...d.messages, [key]: value } }));
 
-  const errors = useMemo(() => validateStep(step, draft), [step, draft]);
-  const allErrors = useMemo(() => [1, 3, 5].flatMap((s) => validateStep(s, draft)), [draft]);
+  const errors = useMemo(() => validateStep(step, draft, selectedProvider), [step, draft, selectedProvider]);
+  const allErrors = useMemo(() => [1, 2, 3, 5].flatMap((s) => validateStep(s, draft, selectedProvider)), [draft, selectedProvider]);
 
   function addKeyword(raw: string, negative = false) {
     const parts = raw.split(/[,،\n]/).map((s) => s.trim()).filter(Boolean);

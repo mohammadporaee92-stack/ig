@@ -91,6 +91,22 @@ export function verifyWebhookSignature(rawBody: string | Buffer, header: string 
   return timingSafeEqual(provided, expected);
 }
 
+/** Zernio از HMAC-SHA256 روی raw body و هدر X-Zernio-Signature استفاده می‌کند. */
+export function verifyZernioWebhookSignature(
+  rawBody: string | Buffer,
+  header: string | null,
+  secret: string,
+): boolean {
+  if (!header || !secret) return false;
+  const hex = header.startsWith('sha256=') ? header.slice('sha256='.length) : header;
+  if (!/^[a-f0-9]{64}$/i.test(hex)) return false;
+  const provided = Buffer.from(hex, 'hex');
+  const expected = createHmac('sha256', secret)
+    .update(typeof rawBody === 'string' ? Buffer.from(rawBody, 'utf8') : rawBody)
+    .digest();
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
+}
+
 /* ─────────── state امضاشده برای OAuth (ضد CSRF) ─────────── */
 
 export function signState(payload: Record<string, unknown>, ttlSeconds = 600): string {

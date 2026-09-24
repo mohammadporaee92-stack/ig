@@ -371,6 +371,10 @@ export interface AutomationRow {
   bot_disclosure_enabled: boolean;
   bot_disclosure_text: string;
   link_url: string;
+  provider_automation_id: string | null;
+  provider_sync_status: string;
+  provider_last_error: string | null;
+  provider_synced_at: Date | null;
   total_runs: number;
   last_run_at: Date | null;
   created_at: Date;
@@ -439,6 +443,7 @@ export class AutomationRepo {
       'once_per_user_per_post', 'public_reply_enabled', 'private_reply_enabled',
       'follow_gate_enabled', 'follow_checker', 'follow_unknown_policy', 'follow_recheck_limit',
       'bot_disclosure_enabled', 'bot_disclosure_text', 'link_url',
+      'provider_automation_id', 'provider_sync_status', 'provider_last_error', 'provider_synced_at',
     ]);
     const sets: string[] = [];
     const params: unknown[] = [id, userId];
@@ -453,6 +458,23 @@ export class AutomationRepo {
       params,
     );
     return res.rows[0] ?? null;
+  }
+
+  async setProviderSync(
+    userId: string,
+    id: string,
+    data: { remoteId?: string | null; status: 'local' | 'synced' | 'error'; error?: string | null },
+  ): Promise<void> {
+    await this.db.query(
+      `UPDATE automations SET
+         provider_automation_id = COALESCE($3, provider_automation_id),
+         provider_sync_status = $4,
+         provider_last_error = $5,
+         provider_synced_at = CASE WHEN $4 = 'synced' THEN now() ELSE provider_synced_at END,
+         updated_at = now()
+       WHERE id = $1 AND user_id = $2`,
+      [id, userId, data.remoteId ?? null, data.status, data.error ?? null],
+    );
   }
 
   async findById(userId: string, id: string): Promise<AutomationRow | null> {
@@ -671,6 +693,7 @@ export class CommentRepo {
 
 export interface WebhookEventRow {
   id: string;
+  platform: string;
   provider_event_id: string;
   event_type: string;
   ig_user_id: string | null;
@@ -691,6 +714,7 @@ export class WebhookEventRepo {
    * اگر رویداد قبلاً دیده شده (retry متا تا ۳۶ ساعت) → `duplicate: true`.
    */
   async store(data: {
+    platform?: string;
     providerEventId: string;
     eventType: string;
     igUserId?: string | null;
@@ -699,19 +723,19 @@ export class WebhookEventRepo {
   }): Promise<{ row: WebhookEventRow; duplicate: boolean }> {
     const res = await this.db.query<WebhookEventRow>(
       `INSERT INTO webhook_events (id, platform, provider_event_id, event_type, ig_user_id, payload, signature_valid, status)
-       VALUES ($1,'instagram',$2,$3,$4,$5,$6,'received')
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'received')
        ON CONFLICT (platform, provider_event_id) DO NOTHING
        RETURNING *`,
       [
-        newId('whk'), data.providerEventId, data.eventType,
+        newId('whk'), data.platform ?? 'instagram', data.providerEventId, data.eventType,
         data.igUserId ?? null, JSON.stringify(data.payload), data.signatureValid,
       ],
     );
     if (res.rows[0]) return { row: res.rows[0], duplicate: false };
 
     const existing = await this.db.query<WebhookEventRow>(
-      `SELECT * FROM webhook_events WHERE platform = 'instagram' AND provider_event_id = $1`,
-      [data.providerEventId],
+      `SELECT * FROM webhook_events WHERE platform = $1 AND provider_event_id = $2`,
+      [data.platform ?? 'instagram', data.providerEventId],
     );
     return { row: existing.rows[0] as WebhookEventRow, duplicate: true };
   }
